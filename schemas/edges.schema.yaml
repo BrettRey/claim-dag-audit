@@ -1,0 +1,28 @@
+type: array
+items:
+  type: object
+  required: [id, from, to, relation, status]
+  properties:
+    id:
+      type: string
+      pattern: "^E[0-9]{3,}$"
+    from:
+      type: array
+      minItems: 1
+      items:
+        type: string
+        pattern: "^C[0-9]{3,}$"
+    to:
+      type: string
+      pattern: "^C[0-9]{3,}$"
+    relation:
+      enum: [supports, requires, rebuts, qualifies]
+    suppressed_premise:
+      type: string
+    status:
+      enum: [uncleared, needs-audit, in-progress, cleared, weakened, failed, deferred]
+    audit:
+      type: string
+    notes:
+      type: string
+

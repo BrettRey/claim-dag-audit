@@ -1,0 +1,26 @@
+type: array
+items:
+  type: object
+  required: [id, anchor, type, section, status]
+  properties:
+    id:
+      type: string
+      pattern: "^C[0-9]{3,}$"
+    anchor:
+      type: string
+      description: Verbatim or near-verbatim text anchor from the paper.
+    type:
+      enum: [definition, empirical-premise, cited-claim, inference, stipulation]
+    section:
+      type: string
+    status:
+      enum: [uncleared, needs-audit, in-progress, cleared, weakened, failed, deferred]
+    warrant:
+      type: string
+    source:
+      type: string
+    evidence:
+      type: string
+    notes:
+      type: string
+

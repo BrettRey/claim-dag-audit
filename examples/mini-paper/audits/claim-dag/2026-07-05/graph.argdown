@@ -1,0 +1,15 @@
+# Claim DAG
+
+[C001]: A profile is projectible when observing part of it licenses further expectations.
+  # definition; status=uncleared
+
+[C002]: The category supports prediction only within a stated scope.
+  # stipulation; status=uncleared
+
+[C003]: Therefore, unsupported scope expansion should trigger demotion.
+  # inference; status=needs-audit
+
+# Edges
+
+[C001] -> [C003] # E001; supports; status=needs-audit
+[C002] -> [C003] # E001; supports; status=needs-audit

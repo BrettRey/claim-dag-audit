@@ -1,0 +1,8 @@
+- id: E001
+  from: [C001, C002]
+  to: C003
+  relation: supports
+  suppressed_premise: "If projection is scope-bound, claims that outrun the stated scope should be downgraded."
+  status: needs-audit
+  notes: "This is the core demotion inference in the mini example."
+

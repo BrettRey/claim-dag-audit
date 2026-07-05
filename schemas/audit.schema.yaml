@@ -1,0 +1,7 @@
+node_audit:
+  required: [claim_id, verdict, auditor, date, test]
+  verdicts: [cleared, weakened, failed, deferred]
+edge_audit:
+  required: [edge_id, verdict, auditor, date, suppressed_premise, attack]
+  verdicts: [cleared, weakened, failed, deferred]
+

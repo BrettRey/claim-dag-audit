@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "claim-dag-audit"
+version = "0.1.0"
+description = "File-first claim dependency graph audits for academic papers"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = ["PyYAML>=6.0.1"]
+
+[project.scripts]
+claim-dag = "claim_dag.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["claim_dag*"]

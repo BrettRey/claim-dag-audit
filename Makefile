@@ -1,4 +1,6 @@
-.PHONY: setup test unit smoke example plan clean
+.PHONY: all setup test unit smoke example plan clean
+
+all: test
 
 setup:
 	python3 -m venv .venv

@@ -94,8 +94,8 @@ naming drifts fast).
 |------|--------|------|------|
 | Local | `glm-4.7-flash`, `gemma3:12b`, `qwen3:8b` (ollama) | none, on-device | First-pass breaker on every target; free, private, unmetered |
 | Cheap | `claude-haiku-4-5`, Copilot (Haiku) | subscription | Bulk cross-family audits |
-| Strong | `claude-opus-4-8`, `codex` (gpt-5.5) | subscription | Escalation on contested or freshly-cleared targets |
-| Max | `claude-fable-5` | subscription | Reserved for the hardest edges (Goodman, Ereshefsky/Reydon) |
+| Strong | `claude-opus-4-8`, `codex` (`gpt-5.4`, medium effort) | subscription | Escalation on contested or freshly-cleared targets |
+| Max | `claude-fable-5` | subscription | Drift re-audits only (the hardest edges: Goodman, Ereshefsky/Reydon) |
 
 **Escalation ladder.** Every target first gets a local-tier refute pass and a
 cheap cross-family refute pass. A `cleared` result is not trusted from the
@@ -106,9 +106,12 @@ demoted and routed to revision, not re-audited until it changes. This escalates
 to a strong model only where cheap models already agree it holds, which is
 exactly where a hidden flaw is most costly.
 
-**Effort.** Local and cheap tiers run at low effort (mechanical refutation
-attempts). Strong and max tiers run at high/xhigh — the edges that reach them
-are the ones where reasoning depth changes the verdict.
+**Effort.** A refutation pass is bounded work, so it does not need top-of-dial
+reasoning. Local and cheap tiers run at low effort; the strong tier runs the
+GPT auditor at medium and Opus at high; the max tier (Fable, drift re-audits
+only) runs at high. Effort is passed through to each CLI — `claude --effort`,
+`codex -c model_reasoning_effort=` — from the policy's `effort` field, so it is
+one dial per tier, not a per-model guess.
 
 ## Budget, concretely
 

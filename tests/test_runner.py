@@ -9,7 +9,7 @@ import yaml
 from claim_dag.audits import enforce_audit_backing
 from claim_dag.io import read_frontmatter, read_yaml
 from claim_dag.promote import promote
-from claim_dag.runner import parse_output, reaudit, run_audits, write_artifact
+from claim_dag.runner import _argv_for, parse_output, reaudit, run_audits, write_artifact
 
 
 def _spine(tmp: Path, built_by="local") -> Path:
@@ -61,6 +61,29 @@ def test_parse_output_block_after_reasoning_preamble():
 def test_parse_output_salvages_bare_lines():
     fm, _ = parse_output("My assessment:\nverdict: weakened\nattack: the wedge\n")
     assert fm["verdict"] == "weakened"
+
+
+# --- effort + model are passed through to the CLIs ---------------------------
+
+def test_argv_passes_model_and_effort():
+    tmp = Path("/tmp")
+    argv, stdin, _ = _argv_for("claude --model claude-opus-4-8", "PROMPT", tmp, "high")
+    assert argv[:3] == ["claude", "--model", "claude-opus-4-8"]
+    assert "--effort" in argv and "high" in argv and argv[-2:] == ["-p", "PROMPT"]
+
+    argv2, _, _ = _argv_for("codex exec --sandbox read-only -m gpt-5.4", "P", tmp, "medium")
+    assert "-m" in argv2 and "gpt-5.4" in argv2
+    assert any(a == "model_reasoning_effort=medium" for a in argv2)
+
+
+def test_codex_effort_max_maps_to_xhigh():
+    argv, _, _ = _argv_for("codex exec", "P", Path("/tmp"), "max")
+    assert any(a == "model_reasoning_effort=xhigh" for a in argv)
+
+
+def test_no_effort_no_flag():
+    argv, _, _ = _argv_for("claude --model x", "P", Path("/tmp"), None)
+    assert "--effort" not in argv
 
 
 def test_runner_stamps_identity_over_model_claims(tmp_path):

@@ -94,20 +94,31 @@ def assemble_prompt(
 
 # --- CLI dispatch ------------------------------------------------------------
 
-def _argv_for(runner: str, prompt: str, tmpdir: Path) -> tuple[list[str], str | None, Callable[[str], str]]:
+# Codex reasoning-effort accepts minimal/low/medium/high/xhigh; it has no
+# "max", so map the policy's max onto xhigh.
+_CODEX_EFFORT = {"low": "low", "medium": "medium", "high": "high", "xhigh": "xhigh", "max": "xhigh"}
+
+
+def _argv_for(
+    runner: str, prompt: str, tmpdir: Path, effort: str | None = None
+) -> tuple[list[str], str | None, Callable[[str], str]]:
     """Build (argv, stdin_text, read_output) for a runner string. The prompt is
     passed as an argument to the agentic CLIs (claude/codex/copilot/gemini) —
     piping it on stdin makes them fall back to an interactive session that
-    ignores the task. Only ollama takes the prompt on stdin."""
+    ignores the task. Only ollama takes the prompt on stdin. The job's effort is
+    passed through where the CLI supports it (claude --effort, codex
+    model_reasoning_effort)."""
     tokens = shlex.split(runner)
     cli = tokens[0] if tokens else ""
     if cli == "ollama":
         return tokens, prompt, lambda out: out
     if cli == "claude":
-        return tokens + ["-p", prompt], None, lambda out: out
+        extra = ["--effort", effort] if effort else []
+        return tokens + extra + ["-p", prompt], None, lambda out: out
     if cli == "codex":
         outfile = tmpdir / "codex-out.md"
-        argv = tokens + ["-o", str(outfile), prompt]
+        extra = ["-c", f"model_reasoning_effort={_CODEX_EFFORT.get(effort, effort)}"] if effort else []
+        argv = tokens + extra + ["-o", str(outfile), prompt]
         return argv, None, lambda out: outfile.read_text(encoding="utf-8") if outfile.exists() else out
     if cli in {"copilot", "gemini"}:
         return tokens + ["-p", prompt], None, lambda out: out
@@ -117,7 +128,9 @@ def _argv_for(runner: str, prompt: str, tmpdir: Path) -> tuple[list[str], str | 
 def cli_dispatch(job: dict[str, Any], timeout: int = 300) -> str:
     prompt = job["prompt"]
     with tempfile.TemporaryDirectory() as td:
-        argv, stdin_text, read_out = _argv_for(job["runner"], prompt, Path(td))
+        argv, stdin_text, read_out = _argv_for(
+            job["runner"], prompt, Path(td), job.get("effort")
+        )
         try:
             # Run in a neutral empty cwd so the audited paper's or tool's repo
             # context never bleeds into the audit.

@@ -16,13 +16,17 @@ DEFAULT_POLICY: list[dict[str, str]] = [
      "runner": "ollama run glm-4.7-flash:q4_K_M"},
     {"family": "anthropic", "model": "claude-haiku-4-5", "tier": "cheap", "effort": "low",
      "runner": "claude --model claude-haiku-4-5"},
-    {"family": "openai", "model": "gpt-5.5", "tier": "strong", "effort": "high",
-     "runner": "codex exec --sandbox read-only"},
-    {"family": "anthropic", "model": "claude-opus-4-8", "tier": "strong", "effort": "xhigh",
+    # A refutation pass does not need the top GPT at max reasoning. gpt-5.4 at
+    # medium effort is a capable independent strong-tier attacker and faster.
+    # NOTE: confirm the exact codex model id against `codex` — gpt-5.4 / -mini
+    # are unverified here; a wrong id degrades to a `deferred` audit, not a crash.
+    {"family": "openai", "model": "gpt-5.4", "tier": "strong", "effort": "medium",
+     "runner": "codex exec --sandbox read-only -m gpt-5.4"},
+    {"family": "anthropic", "model": "claude-opus-4-8", "tier": "strong", "effort": "high",
      "runner": "claude --model claude-opus-4-8"},
     {"family": "google", "model": "gemini", "tier": "cheap", "effort": "low",
      "runner": "gemini --yolo"},
-    {"family": "anthropic", "model": "claude-fable-5", "tier": "max", "effort": "max",
+    {"family": "anthropic", "model": "claude-fable-5", "tier": "max", "effort": "high",
      "runner": "claude --model claude-fable-5"},
 ]
 

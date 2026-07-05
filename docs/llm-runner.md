@@ -94,7 +94,7 @@ naming drifts fast).
 |------|--------|------|------|
 | Local | `glm` (Zhipu) · `qwen` (Alibaba) · `gemma` (Google) via ollama | none, on-device | Free, unmetered, and *three different families* — they satisfy the independence bar at zero cost, so a typical clearance spends just one metered strong-tier call |
 | Cheap | `claude-haiku-4-5`, Copilot (Haiku) | subscription | Bulk cross-family audits |
-| Strong | `claude-opus-4-8` (preferred, fast) · `codex gpt-5.4-mini` fallback (slow startup; only for anthropic-built graphs) | subscription | Escalation on contested or freshly-cleared targets |
+| Strong | `codex gpt-5.4` (medium) · `claude-opus-4-8` — two independent strong families | subscription | Escalation on contested or freshly-cleared targets |
 | Max | `claude-fable-5` | subscription | Drift re-audits only (the hardest edges: Goodman, Ereshefsky/Reydon) |
 
 **Escalation ladder.** Every target first gets a local-tier refute pass and a

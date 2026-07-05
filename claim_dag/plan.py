@@ -26,15 +26,16 @@ DEFAULT_POLICY: list[dict[str, str]] = [
      "runner": "ollama run gemma3:12b"},
     {"family": "anthropic", "model": "claude-haiku-4-5", "tier": "cheap", "effort": "low",
      "runner": "claude --model claude-haiku-4-5"},
-    # Preferred strong auditor: Opus via the claude CLI is fast enough for bulk work.
+    # Two independent strong auditors. gpt-5.4 (codex's "everyday" model) at
+    # medium effort is a capable non-anthropic attacker; Opus is the anthropic
+    # one. codex MUST get --skip-git-repo-check: the runner dispatches it in a
+    # neutral (non-git) cwd to keep repo context out of the audit, and without
+    # the flag codex hangs waiting on its git-repo check. gpt-5.4-mini is the
+    # faster/cheaper swap if you want it.
+    {"family": "openai", "model": "gpt-5.4", "tier": "strong", "effort": "medium",
+     "runner": "codex exec --sandbox read-only --skip-git-repo-check -m gpt-5.4"},
     {"family": "anthropic", "model": "claude-opus-4-8", "tier": "strong", "effort": "high",
      "runner": "claude --model claude-opus-4-8"},
-    # OpenAI strong = the independent fallback for anthropic-built graphs (where
-    # Opus is the builder family and excluded). codex spins up a full agent
-    # session per call, so it is slow — batch it or raise --timeout. Use the
-    # faster gpt-5.4-mini here; a refutation pass doesn't need gpt-5.4.
-    {"family": "openai", "model": "gpt-5.4-mini", "tier": "strong", "effort": "low",
-     "runner": "codex exec --sandbox read-only -m gpt-5.4-mini"},
     # Max tier = strongest available attacker for drift re-audits. Claude Fable
     # belongs here, but there are no Fable credits right now, so Opus 4.8 at max
     # effort stands in. Restore `claude-fable-5` (tier max) when credits return.

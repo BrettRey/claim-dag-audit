@@ -29,6 +29,8 @@ BACKED_VERDICTS = {"cleared", "weakened", "failed"}
 SUPPORTING_RELATIONS = {"supports", "requires"}
 NON_SUPPORTING_RELATIONS = {"rebuts", "qualifies"}
 EDGE_RELATIONS = SUPPORTING_RELATIONS | NON_SUPPORTING_RELATIONS
+DEFEATER_RESOLUTIONS = {"open", "answered", "defeated", "accepted"}
+RESOLVED_DEFEATERS = {"answered", "defeated"}
 
 # Adversarial framing required of any audit that counts toward `cleared`.
 REFUTE_FRAMING = "refute"
@@ -133,9 +135,18 @@ def validate_edges(edges: Any, claim_ids: set[str]) -> ValidationResult:
             errors.append(f"{eid or label}: unknown target claim {to_id}")
         if edge.get("relation") not in EDGE_RELATIONS:
             errors.append(f"{eid or label}: relation must be one of {sorted(EDGE_RELATIONS)}")
+        if edge.get("resolution") is not None and edge.get("resolution") not in DEFEATER_RESOLUTIONS:
+            errors.append(
+                f"{eid or label}: resolution must be one of {sorted(DEFEATER_RESOLUTIONS)}"
+            )
         if edge.get("verdict") not in VERDICTS:
             errors.append(f"{eid or label}: verdict must be one of {sorted(VERDICTS)}")
         if edge.get("relation") in SUPPORTING_RELATIONS and "suppressed_premise" not in edge:
             warnings.append(f"{eid or label}: no suppressed_premise recorded")
+        if edge.get("relation") in NON_SUPPORTING_RELATIONS and "resolution" not in edge:
+            warnings.append(
+                f"{eid or label}: non-supporting edge has no resolution "
+                f"(defaults to open and blocks clearance of its target)"
+            )
 
     return ValidationResult(errors, warnings)

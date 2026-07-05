@@ -1,6 +1,6 @@
 paper_title: Mini Paper
 source: examples/mini-paper/main.tex
-source_sha256: null
+source_sha256: 26e092cfbe75b3455b4b100c6da6fdb183cfec6fd65c58255f71f21e4a2cd838
 built_by: zhipu
 created: '2026-07-05T00:00:00-04:00'
 status: example

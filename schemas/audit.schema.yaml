@@ -4,18 +4,18 @@
 #
 # A `cleared` verdict is enforced, not asserted: it requires >= K (default 2)
 # artifacts from distinct model families, excluding source-manifest.built_by,
-# at least one from a strong/max tier, each with framing: refute and a non-empty
-# could_have_failed, and NO artifact returning failed/weakened (dissent breaks
-# clearance). See docs/llm-runner.md.
+# at least one from a strong/max tier, each with framing: refute and non-empty
+# structured severity fields, and NO artifact returning failed/weakened
+# (dissent breaks clearance). See docs/llm-runner.md.
 
 node_audit:
   required: [claim_id, verdict, model, family, date]
-  cleared_also_required: [framing, tier, could_have_failed]
+  cleared_also_required: [framing, tier, failure_mode, could_have_failed, attack, evidence_checked, source_span]
   verdicts: [cleared, weakened, failed, deferred]
 
 edge_audit:
   required: [edge_id, verdict, model, family, date, suppressed_premise, attack]
-  cleared_also_required: [framing, tier, could_have_failed]
+  cleared_also_required: [framing, tier, failure_mode, could_have_failed, attack, evidence_checked, source_span]
   verdicts: [cleared, weakened, failed, deferred]
 
 fields:
@@ -26,5 +26,15 @@ fields:
     enum: [local, cheap, strong, max]
   family:
     description: Model family (anthropic, openai, google, zhipu, qwen, ...). Diversity buys independence.
+  source_sha256:
+    description: Source manifest sha256 this artifact audited; current-source artifacts are the only ones that count when the manifest is pinned.
   could_have_failed:
     description: The observation that would have flipped the verdict; a rubber stamp has none.
+  failure_mode:
+    description: The specific way the target could be false, misleading, overstrong, or unsupported.
+  attack:
+    description: The attempted hostile wedge or refutation procedure.
+  evidence_checked:
+    description: The source text, data, consistency check, or paper context actually inspected.
+  source_span:
+    description: The passage, location, or data output grounding the audit.

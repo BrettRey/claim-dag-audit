@@ -23,17 +23,24 @@ Target claim:
 [paste target claim record]
 ```
 
+Relevant paper context:
+
+```text
+[paste source passages for the edge]
+```
+
 Your task:
 
 1. Grant the source claims as true.
 2. Try to reach the target *without* the suppressed premise. If you can't, name
    the premise the inference actually needs.
-3. Check whether that premise appears anywhere in the paper. If it does not, the
-   edge cannot be `cleared`.
+3. Check whether that premise appears in the provided paper context. If the
+   needed context is unavailable, or the premise is not present there, the edge
+   cannot be `cleared`; return `deferred`, `weakened`, or `failed`.
 4. Drive the strongest hostile-reviewer wedge you can find.
-5. State, in one line, the observation that would have *flipped your verdict* had
-   it been present. This is `could_have_failed`. An audit with no such line is a
-   rubber stamp and does not count toward clearance.
+5. Record the severity of the attempted test in structured fields:
+   `failure_mode`, `attack`, `evidence_checked`, `source_span`, and
+   `could_have_failed`.
 6. Give a verdict: `cleared` (only if a serious attack failed), `weakened`,
    `failed`, or `deferred`.
 
@@ -49,8 +56,11 @@ family: <anthropic | openai | google | zhipu | qwen | ...>
 tier: <local | cheap | strong | max>
 framing: refute         # must stay "refute" for a cleared verdict to count
 suppressed_premise: "<the premise the inference actually needs>"
+failure_mode: "<the specific way this inference could fail even if the source claims are true>"
 could_have_failed: "<the observation that would have flipped this to failed>"
 attack: "<the wedge you drove>"
+evidence_checked: "<what paper context or source location you actually inspected>"
+source_span: "<the exact passage/location supporting the suppressed premise or edge>"
 date: YYYY-MM-DD
 ---
 # Edge Audit: E000 (<model>)
@@ -60,6 +70,10 @@ date: YYYY-MM-DD
 ## Suppressed Premise
 
 ## Is The Premise Stated?
+
+## Evidence Checked
+
+## Source Span
 
 ## Hostile Wedge
 

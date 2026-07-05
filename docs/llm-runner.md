@@ -49,10 +49,11 @@ Audit prompts never ask a model to confirm. They ask it to *break* the node
 or edge, and they default to broken on uncertainty. The verdict a model
 returns is the outcome of an attempt to refute, not an assessment of
 plausibility. An audit artifact only counts toward `cleared` if it records
-`framing: refute` and a non-empty `could_have_failed` line naming the
-observation that would have flipped it. A test a false claim would pass with
-high probability is worthless; the `could_have_failed` field is where the
-model has to show its probe had teeth.
+`framing: refute` and non-empty structured severity fields: `failure_mode`,
+`attack`, `evidence_checked`, `source_span`, and `could_have_failed`. A test a
+false claim would pass with high probability is worthless; these fields are
+where the model has to show its probe had teeth and identify the evidence it
+actually inspected.
 
 ## Mechanism 2: independence via model diversity
 
@@ -77,8 +78,11 @@ broken it, and none succeeded.
 
 The tool enforces all three in `claim-dag validate`. A `cleared` node or edge
 with missing artifacts, insufficient family diversity, a builder-family
-auditor, a non-refute framing, an empty `could_have_failed`, or any
-dissenting artifact is a validation **error**, not a warning.
+auditor, a non-refute framing, missing structured severity fields, absent edge
+source context, or any dissenting artifact is a validation **error**, not a
+warning. A cleared target also cannot ignore an unresolved incoming `rebuts` or
+`qualifies` edge; such defeaters must be marked `resolution: answered` or
+`resolution: defeated`.
 
 ## The model ladder
 
@@ -96,6 +100,12 @@ naming drifts fast).
 | Cheap | `claude-haiku-4-5`, Copilot (Haiku) | subscription | Bulk cross-family audits |
 | Strong | `codex gpt-5.4` (medium) · `claude-opus-4-8` — two independent strong families | subscription | Escalation on contested or freshly-cleared targets |
 | Max | `claude-fable-5` | subscription | Drift re-audits only (the hardest edges: Goodman, Ereshefsky/Reydon) |
+
+The default ladder is checked in as `model-policy.yaml` and can be overridden
+with `claim-dag plan --policy`, `claim-dag-run audit --policy`, or
+`claim-dag-run reaudit --policy`. Run `claim-dag-run doctor --policy
+model-policy.yaml` on a new machine before dispatching; it reports which runner
+commands are missing.
 
 **Escalation ladder.** Every target first gets a local-tier refute pass and a
 cheap cross-family refute pass. A `cleared` result is not trusted from the
@@ -156,10 +166,10 @@ the audit record and lets the whole contract be tested offline.
 with an assigned model, family, tier, and framing.
 
 **`claim-dag-run audit <dir>`** reads the plan, assembles each prompt (the
-node/edge records, plus a window of the source text around the claim's anchor),
-dispatches it to the relevant CLI (`ollama run`, `claude`, `codex`, `copilot`,
-`gemini`), writes a validated audit artifact back, and runs promotion. Two
-safety rules matter:
+node/edge records, plus source windows around relevant claim anchors and edge
+premises), dispatches it to the relevant CLI (`ollama run`, `claude`, `codex`,
+`copilot`, `gemini`), writes a validated audit artifact back, and runs
+promotion. Two safety rules matter:
 
 - **Identity is stamped, not trusted.** The runner writes `model`, `family`,
   `tier`, `framing`, target id, and date from the job it dispatched, overwriting
@@ -175,11 +185,29 @@ artifacts on disk and writes them back: a target clears only if it meets the
 bar, dissent demotes, and inference verdicts propagate from their supporting
 edges and sources. It is idempotent.
 
+**`claim-dag refresh-source <dir>`** compares the current paper source against
+`source-manifest.yaml`, reports missing anchors and stale verdicts, and with
+`--write` updates the manifest hash, resets stale claim/edge verdicts to
+`unaudited`, and appends an `invalidation-log.yaml` entry. Audit artifacts are
+stamped with the source hash they audited, so old-source artifacts do not count
+toward future plans or promotions after a source refresh.
+
+**`claim-dag-run reconstruct <dir>`** dispatches graph reconstruction jobs
+without touching the canonical graph. Each selected policy entry produces
+`claims.<family-model>.yaml`, `edges.<family-model>.yaml`, and a graph diff
+under `reconstructions/<timestamp>/`. `claim-dag graph-diff` can compare any
+candidate graph to the canonical graph, and `claim-dag reconcile <dir>
+<run-dir> --candidate <id> --write` applies one selected candidate with unsafe
+changes reset to `unaudited`. If multiple reconstructions disagree, the core
+reports candidates and requires explicit selection; it does not auto-merge by
+model majority.
+
 **`claim-dag-run reaudit <dir>`** is the drift loop. It re-attacks every
 currently-`cleared` target with the strongest available auditor from a family
 that has not already cleared it (escalating to the `max` tier), promotes, and
-appends any demotions to `drift-log.yaml` with a date. Run it on a cron: a flaw
-that no model could localize last quarter may be localizable by a stronger model
-this quarter, and every such demotion is a dated, recorded calibration signal.
-The tool never reports a spine as finished — only "cleared under the strongest
-ladder run so far."
+appends a denominator-bearing run record to `drift-log.yaml`: every target
+reaudited, model/family/tier/effort, artifact path, verdict changes, and
+demotions. Run it on a cron: a flaw that no model could localize last quarter
+may be localizable by a stronger model this quarter, and every such demotion is
+a dated, recorded calibration signal. The tool never reports a spine as
+finished — only "cleared under the strongest ladder run so far."

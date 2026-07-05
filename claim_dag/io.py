@@ -42,11 +42,17 @@ def read_frontmatter(path: Path) -> dict[str, Any]:
         end = body.find("\n---")
         if end != -1:
             block = body[:end]
-            data = yaml.safe_load(block)
+            try:
+                data = yaml.safe_load(block)
+            except yaml.YAMLError:
+                return {}
             return data if isinstance(data, dict) else {}
         return {}
     # No fence: accept a bare YAML mapping (e.g. an artifact written as .yaml).
-    data = yaml.safe_load(text)
+    try:
+        data = yaml.safe_load(text)
+    except yaml.YAMLError:
+        return {}
     return data if isinstance(data, dict) else {}
 
 

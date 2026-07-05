@@ -25,10 +25,11 @@ Your task:
 3. If it is empirical, name exactly what data or script output must be checked.
 4. If it is a definition or stipulation, check whether the paper uses it
    consistently and non-circularly.
-5. State, in one line, the observation that would have *flipped your verdict*
-   had it been present. This is `could_have_failed`; an audit without it is a
-   rubber stamp and does not count toward clearance.
-6. Give a verdict: `cleared`, `weakened`, `failed`, or `deferred`.
+5. Record the severity of the attempted test in structured fields:
+   `failure_mode`, `attack`, `evidence_checked`, `source_span`, and
+   `could_have_failed`.
+6. Give a verdict: `cleared`, `weakened`, `failed`, or `deferred`. If you did
+   not have the evidence needed to test the claim, return `deferred`.
 
 Return a single Markdown file beginning with a YAML frontmatter block, which
 `claim-dag validate` machine-checks:
@@ -41,8 +42,11 @@ model: <exact model id you are>
 family: <anthropic | openai | google | zhipu | qwen | ...>
 tier: <local | cheap | strong | max>
 framing: refute         # must stay "refute" for a cleared verdict to count
+failure_mode: "<the specific way this claim could be false, misleading, or overstrong>"
 could_have_failed: "<the observation that would have flipped this to failed>"
 attack: "<the way you tried to break it>"
+evidence_checked: "<what source text, data, or consistency check you actually inspected>"
+source_span: "<the passage, source location, or data output that grounds this audit>"
 date: YYYY-MM-DD
 ---
 # Node Audit: C000 (<model>)
@@ -52,6 +56,8 @@ date: YYYY-MM-DD
 ## Attack
 
 ## Evidence Checked
+
+## Source Span
 
 ## Verdict
 

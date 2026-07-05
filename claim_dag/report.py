@@ -32,6 +32,7 @@ def build_report(
         f"- Claim validation errors: {len(analysis['claim_errors'])}",
         f"- Edge validation errors: {len(analysis['edge_errors'])}",
         f"- Coherence errors: {len(analysis['coherence_errors'])}",
+        f"- Defeater errors: {len(analysis['defeater_errors'])}",
         f"- Unsupported inference nodes: {len(analysis['unsupported_inferences'])}",
         f"- Decorative premise nodes: {len(analysis['decorative_premises'])}",
         f"- Cycles: {len(analysis['cycles'])}",
@@ -52,6 +53,7 @@ def build_report(
     add_messages(lines, "Edge Errors", analysis["edge_errors"])
     add_messages(lines, "Edge Warnings", analysis["edge_warnings"])
     add_messages(lines, "Coherence Errors", analysis["coherence_errors"])
+    add_messages(lines, "Defeater Errors", analysis["defeater_errors"])
     if backing is not None:
         add_messages(lines, "Audit-Backing Errors", backing.errors)
         add_messages(lines, "Audit-Backing Warnings", backing.warnings)

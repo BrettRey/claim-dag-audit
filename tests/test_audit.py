@@ -105,8 +105,11 @@ def _manifest(tmp: Path, built_by="local"):
 def _clear_fm(edge_id, family, tier="strong"):
     return {"edge_id": edge_id, "verdict": "cleared", "model": f"m-{family}",
             "family": family, "tier": tier, "framing": "refute",
-            "could_have_failed": "if X then fail", "suppressed_premise": "sp",
-            "attack": "tried X", "date": "2026-07-05"}
+            "failure_mode": "the inference could require an unstated bridge",
+            "could_have_failed": "the source context lacked the bridge premise",
+            "suppressed_premise": "sp", "attack": "tried X",
+            "evidence_checked": "checked the local source context",
+            "source_span": "paper.md:1 bridge premise", "date": "2026-07-05"}
 
 
 def test_cleared_with_no_artifacts_fails(tmp_path):
@@ -160,6 +163,18 @@ def test_cleared_needs_strong_tier(tmp_path):
     assert any("strong-tier" in e for e in r.errors)
 
 
+def test_cleared_needs_structured_severity(tmp_path):
+    _manifest(tmp_path)
+    fm = _clear_fm("E001", "anthropic")
+    fm["source_span"] = ""
+    _artifact(tmp_path, "edge", "E001.a.md", fm)
+    _artifact(tmp_path, "edge", "E001.b.md", _clear_fm("E001", "openai"))
+    claims = [_claim("C001"), _claim("C009", ctype="inference", verdict="cleared")]
+    edges = [_edge("E001", ["C001"], "C009", verdict="cleared")]
+    r = enforce_audit_backing(claims, edges, tmp_path)
+    assert any("source_span" in e for e in r.errors)
+
+
 def test_clean_clearance_passes(tmp_path):
     _manifest(tmp_path)
     _artifact(tmp_path, "edge", "E001.a.md", _clear_fm("E001", "anthropic", tier="cheap"))
@@ -168,6 +183,48 @@ def test_clean_clearance_passes(tmp_path):
     edges = [_edge("E001", ["C001"], "C009", verdict="cleared")]
     r = enforce_audit_backing(claims, edges, tmp_path)
     assert r.errors == []
+
+
+def test_unresolved_defeater_blocks_cleared_target():
+    claims = [_claim("C001"), _claim("C002", ctype="inference", verdict="cleared")]
+    edges = [_edge("E001", ["C001"], "C002", relation="rebuts", resolution="open")]
+    result = analyze(claims, edges)
+    assert any("E001" in e and "open" in e for e in result["defeater_errors"])
+
+
+def test_answered_defeater_allows_cleared_target():
+    claims = [_claim("C001"), _claim("C002", ctype="inference", verdict="cleared")]
+    edges = [_edge("E001", ["C001"], "C002", relation="rebuts", resolution="answered")]
+    result = analyze(claims, edges)
+    assert result["defeater_errors"] == []
+
+
+def test_malformed_artifact_reports_error_instead_of_crashing(tmp_path):
+    _manifest(tmp_path)
+    d = tmp_path / "edge-audits"
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "E001.bad.md").write_text("---\nverdict: [\n---\nbody", encoding="utf-8")
+    claims = [_claim("C001"), _claim("C009", ctype="inference")]
+    edges = [_edge("E001", ["C001"], "C009")]
+    r = enforce_audit_backing(claims, edges, tmp_path)
+    assert any("no parseable frontmatter" in e for e in r.errors)
+
+
+def test_missing_source_hash_warns(tmp_path):
+    _manifest(tmp_path)
+    r = enforce_audit_backing([], [], tmp_path)
+    assert any("source_sha256" in w for w in r.warnings)
+
+
+def test_source_hash_mismatch_errors(tmp_path):
+    source = tmp_path / "paper.md"
+    source.write_text("changed source", encoding="utf-8")
+    (tmp_path / "source-manifest.yaml").write_text(
+        yaml.safe_dump({"built_by": "local", "source": str(source), "source_sha256": "0" * 64}),
+        encoding="utf-8",
+    )
+    r = enforce_audit_backing([], [], tmp_path)
+    assert any("source_sha256 does not match" in e for e in r.errors)
 
 
 # --- Argdown: joint premises stay one argument -------------------------------

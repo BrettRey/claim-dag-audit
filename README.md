@@ -7,7 +7,7 @@
 Claim DAG Audit turns a paper into a dependency graph of claims, then audits
 nodes and inference edges separately. Auditing is done by language models; the
 tool's job is to define an audit *contract* strict enough that a fleet of
-models cannot rubber-stamp its way to a `cleared` verdict, and to enforce that
+models can't rubber-stamp its way to a `cleared` verdict, and to enforce that
 contract mechanically. See `docs/llm-runner.md` for the architecture.
 
 The tool is deliberately file-first. It creates and validates plain YAML and
@@ -46,6 +46,12 @@ claim-dag init /path/to/paper/audits/claim-dag/2026-07-05 \
   --built-by local
 
 claim-dag validate /path/to/paper/audits/claim-dag/2026-07-05   # structure + audit backing
+claim-dag refresh-source /path/to/paper/audits/claim-dag/2026-07-05
+claim-dag refresh-source /path/to/paper/audits/claim-dag/2026-07-05 --write  # invalidate stale verdicts after source edits
+claim-dag graph-diff /path/to/paper/audits/claim-dag/2026-07-05 \
+  --claims /path/to/candidate-claims.yaml \
+  --edges /path/to/candidate-edges.yaml
+claim-dag reconcile /path/to/paper/audits/claim-dag/2026-07-05 /path/to/reconstruction-run --candidate openai-gpt-5.4 --write
 claim-dag plan     /path/to/paper/audits/claim-dag/2026-07-05   # audit jobs still needed to clear
 claim-dag promote  /path/to/paper/audits/claim-dag/2026-07-05   # verdicts <- artifacts (no models)
 claim-dag argdown  /path/to/paper/audits/claim-dag/2026-07-05   # valid Argdown
@@ -57,14 +63,20 @@ The core `claim-dag` never calls a model. A separate console script,
 
 ```bash
 claim-dag-run audit   /path/.../2026-07-05 --dry-run   # preview jobs, no model calls
-claim-dag-run audit   /path/.../2026-07-05             # dispatch, write artifacts, promote
-claim-dag-run reaudit /path/.../2026-07-05             # re-attack cleared targets, log drift
+claim-dag-run doctor  --policy model-policy.yaml        # check runner commands on this machine
+claim-dag-run reconstruct /path/.../2026-07-05 --policy model-policy.yaml --dry-run
+claim-dag-run audit   /path/.../2026-07-05 --policy model-policy.yaml
+claim-dag-run reaudit /path/.../2026-07-05 --policy model-policy.yaml
 ```
 
 `claim-dag-run` stamps each artifact's identity fields (model, family, tier,
 framing) from the job rather than trusting the model's self-report, and writes
 `verdict: deferred` when a model's output has no recoverable verdict — so a
 rambling model never fabricates a clearance. See `docs/llm-runner.md`.
+
+`model-policy.yaml` is an editable copy of the default model ladder. Use
+`claim-dag-run doctor` after changing it; the doctor checks whether each runner
+command is available on the current machine.
 
 ## Data Contract
 
@@ -100,10 +112,25 @@ edge is backed by:
 
 - audit artifacts from **≥2 model families**, none the builder family (`built_by`);
 - **≥1 strong-tier** audit (cheap/local agreement is not enough);
-- each with `framing: refute` and a non-empty `could_have_failed`;
+- each with `framing: refute` and non-empty severity fields:
+  `failure_mode`, `attack`, `evidence_checked`, `source_span`, and
+  `could_have_failed`;
 - **no** dissenting artifact — one `failed`/`weakened` result breaks clearance.
 
-It also errors on support cycles and on any conclusion cleared above weaker
-support (verdict coherence).
+It also errors on support cycles, unsupported inference nodes, unresolved
+incoming defeaters (`rebuts`/`qualifies` without `resolution: answered` or
+`resolution: defeated`), and any conclusion cleared above weaker support
+(verdict coherence).
 
-The intended first pilot is `papers/preprints/kinds-as-projectibility-profiles/`.
+When the paper source changes, `claim-dag refresh-source` compares the current
+source hash with `source-manifest.yaml`, reports missing anchors and stale
+verdicts, and with `--write` resets stale verdicts to `unaudited` while logging
+the invalidation.
+
+For graph maintenance, `claim-dag-run reconstruct` writes independent model
+candidate graphs under `reconstructions/`; `claim-dag graph-diff` compares a
+candidate against the canonical graph; `claim-dag reconcile` applies one
+selected candidate only when called with `--write`.
+
+First pilot: Brett Reynolds's paper
+[Kinds as Projectibility Profiles](https://github.com/BrettRey/kinds-as-projectibility-profiles).

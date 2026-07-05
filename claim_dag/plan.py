@@ -5,43 +5,9 @@ from typing import Any
 
 from .audits import artifacts_by_target
 from .io import read_yaml
+from .policy import DEFAULT_POLICY
 from .schema import STRONG_TIERS
-
-# Ordered tier policy, grounded in the CLIs and local models installed on this
-# machine (see docs/llm-runner.md). Cheap/local first; at least one strong-tier
-# family is required before a target may be promoted to `cleared`. Model names
-# drift fast — verify before relying on them.
-DEFAULT_POLICY: list[dict[str, str]] = [
-    # Local models are free, unmetered, and — crucially — genuinely different
-    # families (Zhipu / Alibaba / Google), so they satisfy the cross-family
-    # independence bar without spending a subscription call. Clearance still
-    # needs one strong-tier audit, but the family diversity can come from here.
-    {"family": "zhipu", "model": "glm-4.7-flash:q4_K_M", "tier": "local", "effort": "low",
-     "runner": "ollama run glm-4.7-flash:q4_K_M"},
-    {"family": "qwen", "model": "qwen3:8b", "tier": "local", "effort": "low",
-     "runner": "ollama run qwen3:8b"},
-    # gemma shares the "google" family with the Gemini API — same lineage, so it
-    # is the free stand-in for Google's perspective rather than an extra family.
-    {"family": "google", "model": "gemma3:12b", "tier": "local", "effort": "low",
-     "runner": "ollama run gemma3:12b"},
-    {"family": "anthropic", "model": "claude-haiku-4-5", "tier": "cheap", "effort": "low",
-     "runner": "claude --model claude-haiku-4-5"},
-    # Two independent strong auditors. gpt-5.4 (codex's "everyday" model) at
-    # medium effort is a capable non-anthropic attacker; Opus is the anthropic
-    # one. codex MUST get --skip-git-repo-check: the runner dispatches it in a
-    # neutral (non-git) cwd to keep repo context out of the audit, and without
-    # the flag codex hangs waiting on its git-repo check. gpt-5.4-mini is the
-    # faster/cheaper swap if you want it.
-    {"family": "openai", "model": "gpt-5.4", "tier": "strong", "effort": "medium",
-     "runner": "codex exec --sandbox read-only --skip-git-repo-check -m gpt-5.4"},
-    {"family": "anthropic", "model": "claude-opus-4-8", "tier": "strong", "effort": "high",
-     "runner": "claude --model claude-opus-4-8"},
-    # Max tier = strongest available attacker for drift re-audits. Claude Fable
-    # belongs here, but there are no Fable credits right now, so Opus 4.8 at max
-    # effort stands in. Restore `claude-fable-5` (tier max) when credits return.
-    {"family": "anthropic", "model": "claude-opus-4-8", "tier": "max", "effort": "max",
-     "runner": "claude --model claude-opus-4-8"},
-]
+from .source import artifact_matches_source
 
 
 def _jobs_for(
@@ -50,11 +16,14 @@ def _jobs_for(
     prompt: str,
     arts: list[dict[str, Any]],
     builder_family: str | None,
+    source_sha: str | None,
     min_families: int,
     policy: list[dict[str, str]],
 ) -> tuple[list[dict[str, Any]], dict[str, Any] | None]:
     """Return (audit jobs, revise-note). A dissenting artifact routes the target
     to revision instead of more audits."""
+    if source_sha:
+        arts = [a for a in arts if artifact_matches_source(a, source_sha)]
     dissent = [a for a in arts if a.get("verdict") in {"failed", "weakened"}]
     if dissent:
         worst = "failed" if any(a.get("verdict") == "failed" for a in dissent) else "weakened"
@@ -105,6 +74,7 @@ def build_plan(
     policy = policy or DEFAULT_POLICY
     manifest = read_yaml(audit_dir / "source-manifest.yaml", {})
     builder_family = manifest.get("built_by") if isinstance(manifest, dict) else None
+    source_sha = manifest.get("source_sha256") if isinstance(manifest, dict) else None
     node_by_id, edge_by_id = artifacts_by_target(audit_dir)
 
     jobs: list[dict[str, Any]] = []
@@ -116,10 +86,9 @@ def build_plan(
         if claim.get("type") == "inference":
             # Inference clearance comes from its edges + coherence, not a node audit.
             continue
-        if claim.get("verdict") == "cleared":
-            continue
         j, r = _jobs_for(claim["id"], "node", "prompts/audit-node.md",
-                         node_by_id.get(claim["id"], []), builder_family, min_families, policy)
+                         node_by_id.get(claim["id"], []), builder_family, source_sha,
+                         min_families, policy)
         jobs.extend(j)
         if r:
             revise.append(r)
@@ -127,10 +96,9 @@ def build_plan(
     for edge in edges:
         if not isinstance(edge, dict) or "id" not in edge:
             continue
-        if edge.get("verdict") == "cleared":
-            continue
         j, r = _jobs_for(edge["id"], "edge", "prompts/audit-edge.md",
-                         edge_by_id.get(edge["id"], []), builder_family, min_families, policy)
+                         edge_by_id.get(edge["id"], []), builder_family, source_sha,
+                         min_families, policy)
         jobs.extend(j)
         if r:
             revise.append(r)

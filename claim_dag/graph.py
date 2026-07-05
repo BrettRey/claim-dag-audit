@@ -7,6 +7,7 @@ from typing import Any
 from .io import read_yaml
 from .schema import (
     NON_SUPPORTING_RELATIONS,
+    RESOLVED_DEFEATERS,
     SUPPORTING_RELATIONS,
     validate_claims,
     validate_edges,
@@ -79,6 +80,7 @@ def analyze(claims: list[dict[str, Any]], edges: list[dict[str, Any]]) -> dict[s
 
     cycles = find_cycles(adjacency, ids)
     coherence = verdict_coherence(claims_by_id, edges, incoming)
+    defeaters = defeater_coherence(claims_by_id, edges)
 
     return {
         "claim_errors": claim_result.errors,
@@ -89,6 +91,7 @@ def analyze(claims: list[dict[str, Any]], edges: list[dict[str, Any]]) -> dict[s
         "decorative_premises": decorative,
         "cycles": cycles,
         "coherence_errors": coherence,
+        "defeater_errors": defeaters,
         "incoming": {key: sorted(value) for key, value in incoming.items()},
         "outgoing": {key: sorted(value) for key, value in outgoing.items()},
         "challenges": {key: sorted(value) for key, value in challenges.items()},
@@ -136,6 +139,36 @@ def verdict_coherence(
                     errors.append(
                         f"{cid}: cleared but source {src} (via {eid}) is {src_verdict}"
                     )
+    return errors
+
+
+def defeater_coherence(
+    claims_by_id: dict[str, dict[str, Any]],
+    edges: list[dict[str, Any]],
+) -> list[str]:
+    """A cleared claim cannot ignore an open or accepted incoming defeater.
+
+    `rebuts` and `qualifies` do not support the target, but they are not merely
+    decorative. A target may clear only after each such challenge is answered or
+    defeated in the edge record.
+    """
+    errors: list[str] = []
+    for edge in edges:
+        if not isinstance(edge, dict) or edge.get("relation") not in NON_SUPPORTING_RELATIONS:
+            continue
+        target, sources = _edge_endpoints(edge)
+        if target is None:
+            continue
+        target_record = claims_by_id.get(target, {})
+        if target_record.get("verdict") != "cleared":
+            continue
+        resolution = edge.get("resolution", "open")
+        if resolution not in RESOLVED_DEFEATERS:
+            sid = ", ".join(sources) or "unknown source"
+            errors.append(
+                f"{target}: cleared but {edge.get('id', 'E???')} "
+                f"{edge.get('relation')} from {sid} is {resolution}"
+            )
     return errors
 
 

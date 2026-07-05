@@ -18,7 +18,7 @@ status. Reason: an audit node or edge is cleared only when an attack has failed,
 not when the prose seems plausible.
 
 2026-07-05 - Name a five-person aspirational advisory board (van Gelder, Betz,
-Rushby, Mayo, Fidler) in ADVISORY-BOARD.md. Reason: the board enumerates the
+Rushby, Mayo, Fidler) in advisory-board.md. Reason: the board enumerates the
 tool's risk surfaces (adoption, automation, audit rigour, severity, calibration)
 and the standing objections each perspective supplies; not an outreach list.
 
@@ -98,3 +98,35 @@ audit returns in ~29s. Verified live via a subagent (real `failed` verdict).
 2026-07-05 - Published to public GitHub: https://github.com/BrettRey/claim-dag-audit
 Added a cute "claim-dog" logo (assets/logo.svg, logo-wordmark.svg), with the
 wordmark theme-aware so it reads on dark grounds.
+
+2026-07-05 - Tighten the first-pilot contract after a second advisory-board
+pass. Cleared artifacts now require structured severity fields
+(`failure_mode`, `attack`, `evidence_checked`, `source_span`,
+`could_have_failed`), edge prompts receive source context and defer if it is
+unavailable, unresolved `rebuts`/`qualifies` block target clearance,
+unsupported inferences are validation-fatal, and `reaudit` logs the full
+denominator rather than only demotions. Reason: the board converged on edge
+source-grounding, syntactic severity, defeater resolution, and calibration
+denominator gaps.
+
+2026-07-05 - Add source-version maintenance before building a full graph
+update engine. Audit artifacts are stamped with the `source_sha256` they
+audited; plan/promote/validate ignore or reject stale-source artifacts when the
+manifest is pinned; `claim-dag refresh-source` reports hash drift, missing
+anchors, and stale verdicts, and `--write` invalidates them with an
+`invalidation-log.yaml` entry. Reason: this answers the immediate maintenance
+failure mode after paper revisions without pretending to solve independent
+graph extraction yet.
+
+2026-07-05 - Externalize the model ladder into `model-policy.yaml` and add
+`claim-dag-run doctor`. Reason: the default policy remains useful on Brett's
+machine, but public users need to inspect/edit runner commands and check which
+CLIs exist before dispatching.
+
+2026-07-05 - Add the first graph extraction/reconciliation loop.
+`claim-dag-run reconstruct` writes model-generated candidate claims/edges under
+`reconstructions/<timestamp>/`, `claim-dag graph-diff` compares candidates to
+the canonical graph, and `claim-dag reconcile` applies exactly one selected
+candidate with unsafe changes reset to `unaudited`. Reason: after source edits,
+the tool needs more than invalidation, but automatic multi-model graph merging
+would hide disagreement and omitted claims.

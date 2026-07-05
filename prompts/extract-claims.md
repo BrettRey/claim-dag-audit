@@ -2,6 +2,12 @@
 
 Read the paper and extract substantive claims, not paragraphs.
 
+Paper source:
+
+```text
+[paste paper source]
+```
+
 For each claim, produce:
 
 - `id`: C001, C002, ...
@@ -23,4 +29,3 @@ Rules:
 - Every claim starts `verdict: unaudited`; it changes only when an adversarial audit clears, weakens, or fails it.
 
 Return a top-level YAML list (no code fences, no wrapper key).
-

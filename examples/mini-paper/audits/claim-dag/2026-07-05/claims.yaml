@@ -5,7 +5,7 @@
   verdict: cleared
   warrant: stipulation-check
 - id: C002
-  anchor: "The category supports prediction only within a stated scope."
+  anchor: "The category supports prediction only within a stated scope: observable predictive use in the worked example."
   type: stipulation
   section: Example
   verdict: cleared

@@ -25,9 +25,12 @@ import yaml
 from .audits import DEFAULT_MIN_FAMILIES, artifacts_by_target
 from .graph import _edge_endpoints, claim_map, load_audit
 from .io import read_yaml, write_text, write_yaml
-from .plan import DEFAULT_POLICY, build_plan
+from .plan import build_plan
+from .policy import DEFAULT_POLICY, load_policy, policy_doctor
 from .promote import promote
+from .reconcile import graph_diff
 from .schema import STRONG_TIERS, VERDICTS
+from .source import current_source_sha, resolve_source, source_text
 
 _TOOL_ROOT = Path(__file__).resolve().parent.parent
 _PROMPTS = _TOOL_ROOT / "prompts"
@@ -35,19 +38,19 @@ _PROMPTS = _TOOL_ROOT / "prompts"
 Dispatcher = Callable[[dict], str]  # (job-with-prompt) -> raw model output
 
 
+def _slug(text: str) -> str:
+    return re.sub(r"[^A-Za-z0-9]+", "-", text).strip("-")
+
+
 # --- prompt assembly ---------------------------------------------------------
 
 def _source_window(audit_dir: Path, source: str | None, anchor: str, radius: int = 900) -> str:
     if not source or not anchor:
         return ""
-    candidates = [Path(source), _TOOL_ROOT / source, audit_dir / source]
-    text = None
-    for cand in candidates:
-        if cand.exists() and cand.is_file():
-            text = cand.read_text(encoding="utf-8", errors="replace")
-            break
-    if text is None:
+    found = resolve_source(audit_dir, source)
+    if found is None:
         return ""
+    text = found.read_text(encoding="utf-8", errors="replace")
     needle = " ".join(anchor.split())[:60]
     hay = " ".join(text.split())
     idx = hay.lower().find(needle.lower())
@@ -55,6 +58,33 @@ def _source_window(audit_dir: Path, source: str | None, anchor: str, radius: int
         return ""
     lo, hi = max(0, idx - radius), idx + len(needle) + radius
     return hay[lo:hi]
+
+
+def _edge_source_context(
+    audit_dir: Path,
+    source: str | None,
+    edge: dict[str, Any],
+    sources: list[str],
+    target_claim: dict[str, Any],
+    claims_by_id: dict[str, dict],
+) -> str:
+    chunks: list[str] = []
+    seen: set[str] = set()
+    for cid in [*sources, str(edge.get("to", ""))]:
+        claim = target_claim if cid == edge.get("to") else claims_by_id.get(cid, {})
+        anchor = str(claim.get("anchor", ""))
+        if not anchor or anchor in seen:
+            continue
+        seen.add(anchor)
+        window = _source_window(audit_dir, source, anchor, radius=1200)
+        if window:
+            chunks.append(f"## {cid}\n{window}")
+    suppressed = str(edge.get("suppressed_premise", "")).strip()
+    if suppressed and suppressed not in seen:
+        window = _source_window(audit_dir, source, suppressed, radius=1200)
+        if window:
+            chunks.append(f"## suppressed_premise\n{window}")
+    return "\n\n".join(chunks)
 
 
 def assemble_prompt(
@@ -74,12 +104,21 @@ def assemble_prompt(
         edge = edges_by_id[tid]
         _, sources = _edge_endpoints(edge)
         target_claim = claims_by_id.get(edge.get("to", ""), {})
+        manifest = read_yaml(audit_dir / "source-manifest.yaml", {})
+        context = _edge_source_context(
+            audit_dir, manifest.get("source"), edge, sources, target_claim, claims_by_id
+        )
+        job["source_context_available"] = bool(context.strip())
         template = template.replace("[paste edge record]", dump(edge))
         template = template.replace(
             "[paste source claim records]",
             dump([claims_by_id[s] for s in sources if s in claims_by_id]),
         )
         template = template.replace("[paste target claim record]", dump(target_claim))
+        template = template.replace(
+            "[paste source passages for the edge]",
+            context or "[source passage unavailable; return verdict: deferred]",
+        )
     else:
         claim = claims_by_id[tid]
         manifest = read_yaml(audit_dir / "source-manifest.yaml", {})
@@ -89,6 +128,27 @@ def assemble_prompt(
             "[paste local passage plus surrounding paragraphs]",
             window or "[source passage unavailable; audit the claim as recorded]",
         )
+    return template
+
+
+def assemble_extraction_prompt(source: str) -> str:
+    template = (_PROMPTS / "extract-claims.md").read_text(encoding="utf-8")
+    if "[paste paper source]" in template:
+        return template.replace("[paste paper source]", source)
+    return template + "\n\nPaper source:\n\n```text\n" + source + "\n```\n"
+
+
+def assemble_edges_prompt(claims: list[dict], source: str) -> str:
+    template = (_PROMPTS / "build-edges.md").read_text(encoding="utf-8")
+    claims_yaml = yaml.safe_dump(claims, sort_keys=False, allow_unicode=True).strip()
+    if "[paste claims.yaml]" in template:
+        template = template.replace("[paste claims.yaml]", claims_yaml)
+    else:
+        template += "\n\nClaims:\n\n```yaml\n" + claims_yaml + "\n```\n"
+    if "[paste paper source]" in template:
+        template = template.replace("[paste paper source]", source)
+    else:
+        template += "\n\nPaper source:\n\n```text\n" + source + "\n```\n"
     return template
 
 
@@ -150,6 +210,23 @@ def cli_dispatch(job: dict[str, Any], timeout: int = 300) -> str:
 _FM_RE = re.compile(r"(?ms)^---[ \t]*$(.*?)^---[ \t]*$")
 _FENCE_RE = re.compile(r"(?ms)```(?:yaml|markdown|yml)?[ \t]*\n(.*?)```")
 _VERDICT_RE = re.compile(r"verdict:\s*[\"']?(cleared|weakened|failed|deferred)", re.I)
+_TEMPLATE_TARGETS = {"C000", "E000"}
+_TIER_RANK = {"local": 0, "cheap": 1, "strong": 2, "max": 3}
+
+
+def _looks_like_template(data: dict[str, Any]) -> bool:
+    """Reject prompt examples/placeholders before they can become artifacts."""
+    if data.get("claim_id") in _TEMPLATE_TARGETS or data.get("edge_id") in _TEMPLATE_TARGETS:
+        return True
+    for value in data.values():
+        if not isinstance(value, str):
+            continue
+        stripped = value.strip()
+        if stripped == "YYYY-MM-DD":
+            return True
+        if stripped.startswith("<") and stripped.endswith(">"):
+            return True
+    return False
 
 
 def _load_mapping(block: str) -> dict[str, Any] | None:
@@ -157,7 +234,9 @@ def _load_mapping(block: str) -> dict[str, Any] | None:
         data = yaml.safe_load(block)
     except yaml.YAMLError:
         return None
-    return data if isinstance(data, dict) and "verdict" in data else None
+    if not isinstance(data, dict) or "verdict" not in data:
+        return None
+    return None if _looks_like_template(data) else data
 
 
 def _salvage(text: str) -> dict[str, Any] | None:
@@ -167,7 +246,14 @@ def _salvage(text: str) -> dict[str, Any] | None:
     if not m:
         return None
     out: dict[str, Any] = {"verdict": m.group(1).lower()}
-    for key in ("could_have_failed", "attack", "suppressed_premise"):
+    for key in (
+        "could_have_failed",
+        "failure_mode",
+        "attack",
+        "evidence_checked",
+        "source_span",
+        "suppressed_premise",
+    ):
         km = re.search(rf"{key}:\s*[\"']?(.+)", text)
         if km:
             out[key] = km.group(1).strip().strip("\"'")
@@ -192,19 +278,54 @@ def parse_output(text: str) -> tuple[dict[str, Any], str]:
         data = _load_mapping(fm.group(1) if fm else inner)
         if data:
             return data, s
-    # 3. bare key: value lines in prose
-    salvaged = _salvage(s)
-    return (salvaged or {}), s
+    # 3. bare key: value lines in prose. Strip fenced prompt examples first; a
+    # model echoing the instructions must not become a `cleared` artifact.
+    prose_only = _FENCE_RE.sub("", s)
+    salvaged = _salvage(prose_only)
+    if salvaged and not _looks_like_template(salvaged):
+        return salvaged, s
+    return {}, s
+
+
+def parse_yaml_list(text: str) -> list[dict[str, Any]]:
+    s = text.strip()
+    candidates = [s]
+    candidates.extend(m.group(1).strip() for m in _FENCE_RE.finditer(s))
+    for candidate in candidates:
+        try:
+            data = yaml.safe_load(candidate)
+        except yaml.YAMLError:
+            continue
+        if isinstance(data, dict):
+            for key in ("claims", "edges"):
+                if isinstance(data.get(key), list):
+                    data = data[key]
+                    break
+        if isinstance(data, list) and all(isinstance(item, dict) for item in data):
+            return data
+    return []
+
+
+def _matches_dispatched_target(fm: dict[str, Any], job: dict[str, Any]) -> bool:
+    target_key = "edge_id" if job["kind"] == "edge" else "claim_id"
+    explicit = fm.get(target_key)
+    return not explicit or explicit == job["target"]
 
 
 def write_artifact(
     audit_dir: Path, job: dict[str, Any], output: str, fallback_suppressed: str = ""
 ) -> Path:
     fm, body = parse_output(output)
+    if fm and not _matches_dispatched_target(fm, job):
+        fm = {"verdict": "deferred"}
     verdict = fm.get("verdict")
     if verdict not in VERDICTS:
         verdict = "deferred"
+    if job["kind"] == "edge" and verdict == "cleared" and not job.get("source_context_available", True):
+        verdict = "deferred"
     today = datetime.now().date().isoformat()
+    manifest = read_yaml(audit_dir / "source-manifest.yaml", {})
+    source_sha = manifest.get("source_sha256") if isinstance(manifest, dict) else None
 
     stamped: dict[str, Any] = {
         ("edge_id" if job["kind"] == "edge" else "claim_id"): job["target"],
@@ -214,15 +335,27 @@ def write_artifact(
         "tier": job["tier"],
         "framing": "refute",
         "could_have_failed": str(fm.get("could_have_failed", "")).strip(),
+        "failure_mode": str(fm.get("failure_mode", "")).strip(),
         "attack": str(fm.get("attack", "")).strip(),
+        "evidence_checked": str(fm.get("evidence_checked", "")).strip(),
+        "source_span": str(fm.get("source_span", "")).strip(),
         "date": today,
     }
+    if source_sha:
+        stamped["source_sha256"] = source_sha
     if job["kind"] == "edge":
         stamped["suppressed_premise"] = str(fm.get("suppressed_premise", "") or fallback_suppressed).strip()
 
     slug = re.sub(r"[^A-Za-z0-9]+", "-", job["model"]).strip("-")
     subdir = "edge-audits" if job["kind"] == "edge" else "node-audits"
     path = audit_dir / subdir / f"{job['target']}.{job['family']}-{slug}.md"
+    if path.exists():
+        stamp = datetime.now().strftime("%Y%m%dT%H%M%S%f")
+        path = audit_dir / subdir / f"{job['target']}.{job['family']}-{slug}.{stamp}.md"
+        counter = 2
+        while path.exists():
+            path = audit_dir / subdir / f"{job['target']}.{job['family']}-{slug}.{stamp}-{counter}.md"
+            counter += 1
     content = "---\n" + yaml.safe_dump(stamped, sort_keys=False, allow_unicode=True) + "---\n"
     content += body or output.strip() + "\n"
     write_text(path, content)
@@ -238,13 +371,14 @@ def run_audits(
     limit: int | None = None,
     dry_run: bool = False,
     dispatcher: Dispatcher | None = None,
+    policy: list[dict[str, str]] | None = None,
 ) -> dict[str, Any]:
     dispatcher = dispatcher or cli_dispatch
     claims, edges = load_audit(audit_dir)
     claims_by_id = claim_map(claims)
     edges_by_id = {e["id"]: e for e in edges if isinstance(e, dict) and "id" in e}
 
-    plan = build_plan(claims, edges, audit_dir, min_families=min_families)
+    plan = build_plan(claims, edges, audit_dir, min_families=min_families, policy=policy)
     jobs = plan["jobs"]
     if tiers:
         jobs = [j for j in jobs if j["tier"] in tiers]
@@ -254,7 +388,8 @@ def run_audits(
     written: list[str] = []
     previews: list[dict[str, str]] = []
     for job in jobs:
-        job = {**job, "prompt": assemble_prompt(job, claims_by_id, edges_by_id, audit_dir)}
+        job = dict(job)
+        job["prompt"] = assemble_prompt(job, claims_by_id, edges_by_id, audit_dir)
         if dry_run:
             previews.append({"target": job["target"], "kind": job["kind"],
                              "model": job["model"], "family": job["family"], "runner": job["runner"]})
@@ -332,24 +467,144 @@ def reaudit(
         if entry:
             jobs.append({"target": edge["id"], "kind": "edge", "prompt_file": "audit-edge.md", **entry})
 
+    written: list[dict[str, Any]] = []
     for job in jobs:
-        job = {**job, "prompt": assemble_prompt(job, claims_by_id, edges_by_id, audit_dir)}
+        job = dict(job)
+        job["prompt"] = assemble_prompt(job, claims_by_id, edges_by_id, audit_dir)
         fallback = str(edges_by_id.get(job["target"], {}).get("suppressed_premise", "")) if job["kind"] == "edge" else ""
-        write_artifact(audit_dir, job, dispatcher(job), fallback)
+        path = write_artifact(audit_dir, job, dispatcher(job), fallback)
+        written.append({
+            "target": job["target"],
+            "kind": job["kind"],
+            "model": job["model"],
+            "family": job["family"],
+            "tier": job["tier"],
+            "effort": job.get("effort"),
+            "artifact": str(path),
+        })
 
     changes = promote(audit_dir, min_families=min_families)
     demotions = [c for c in changes if c["old"] == "cleared" and c["new"] != "cleared"]
-    if demotions:
-        log = read_yaml(audit_dir / "drift-log.yaml", [])
-        if not isinstance(log, list):
-            log = []
-        log.append({
-            "date": datetime.now().date().isoformat(),
-            "reaudit_tier": "strong",
-            "demotions": demotions,
+    log = read_yaml(audit_dir / "drift-log.yaml", [])
+    if not isinstance(log, list):
+        log = []
+    tiers = sorted({j.get("tier", "unknown") for j in jobs}, key=lambda t: _TIER_RANK.get(t, -1))
+    entry = {
+        "date": datetime.now().date().isoformat(),
+        "reaudited": len(jobs),
+        "reaudit_tier": tiers[-1] if tiers else None,
+        "reaudit_tiers": tiers,
+        "targets": written,
+        "changes": changes,
+        "demotions": demotions,
+    }
+    log.append(entry)
+    write_yaml(audit_dir / "drift-log.yaml", log)
+    return {"reaudited": len(jobs), "changes": changes, "demotions": demotions, "log_entry": entry}
+
+
+def _select_policy(
+    policy: list[dict[str, str]],
+    families: set[str] | None,
+    tiers: set[str] | None,
+    limit: int | None,
+) -> list[dict[str, str]]:
+    entries = policy
+    if families:
+        entries = [entry for entry in entries if entry["family"] in families]
+    if tiers:
+        entries = [entry for entry in entries if entry["tier"] in tiers]
+    if limit is not None:
+        entries = entries[:limit]
+    return entries
+
+
+def reconstruct(
+    audit_dir: Path,
+    policy: list[dict[str, str]] | None = None,
+    families: set[str] | None = None,
+    tiers: set[str] | None = None,
+    limit: int | None = None,
+    dry_run: bool = False,
+    dispatcher: Dispatcher | None = None,
+) -> dict[str, Any]:
+    dispatcher = dispatcher or cli_dispatch
+    policy = policy or DEFAULT_POLICY
+    selected = _select_policy(policy, families, tiers, limit)
+    manifest = read_yaml(audit_dir / "source-manifest.yaml", {})
+    manifest = manifest if isinstance(manifest, dict) else {}
+    paper = source_text(audit_dir, manifest)
+    source_sha = current_source_sha(audit_dir, manifest)
+    if paper is None:
+        return {"ok": False, "error": "source unavailable", "source": manifest.get("source")}
+
+    run_id = datetime.now().strftime("%Y-%m-%dT%H%M%S")
+    run_dir = audit_dir / "reconstructions" / run_id
+    previews = [
+        {"family": e["family"], "model": e["model"], "tier": e["tier"], "runner": e["runner"]}
+        for e in selected
+    ]
+    if dry_run:
+        return {"ok": True, "run_dir": str(run_dir), "job_count": len(selected) * 2, "dry_run": previews}
+
+    claims, edges = load_audit(audit_dir)
+    run_dir.mkdir(parents=True, exist_ok=True)
+    written: list[dict[str, Any]] = []
+    diffs: list[dict[str, Any]] = []
+
+    for entry in selected:
+        slug = f"{entry['family']}-{_slug(entry['model'])}"
+        claim_job = {
+            "kind": "extract-claims",
+            "target": "claims",
+            "prompt": assemble_extraction_prompt(paper),
+            **entry,
+        }
+        candidate_claims = parse_yaml_list(dispatcher(claim_job))
+        claims_path = run_dir / f"claims.{slug}.yaml"
+        write_yaml(claims_path, candidate_claims)
+
+        edge_job = {
+            "kind": "build-edges",
+            "target": "edges",
+            "prompt": assemble_edges_prompt(candidate_claims, paper),
+            **entry,
+        }
+        candidate_edges = parse_yaml_list(dispatcher(edge_job))
+        edges_path = run_dir / f"edges.{slug}.yaml"
+        write_yaml(edges_path, candidate_edges)
+
+        diff = graph_diff(claims, edges, candidate_claims, candidate_edges, audit_dir)
+        diff_path = run_dir / f"graph-diff.{slug}.yaml"
+        write_yaml(diff_path, diff)
+        written.append({
+            "id": slug,
+            "family": entry["family"],
+            "model": entry["model"],
+            "tier": entry["tier"],
+            "claims": str(claims_path),
+            "edges": str(edges_path),
+            "graph_diff": str(diff_path),
         })
-        write_yaml(audit_dir / "drift-log.yaml", log)
-    return {"reaudited": len(jobs), "changes": changes, "demotions": demotions}
+        diffs.append({"id": slug, **diff})
+
+    recon = {
+        "source": manifest.get("source"),
+        "source_sha256": source_sha,
+        "run_dir": str(run_dir),
+        "candidates": written,
+        "diffs": diffs,
+        "requires_candidate_selection": len(written) != 1,
+    }
+    write_yaml(run_dir / "reconciliation.yaml", recon)
+    write_yaml(run_dir / "manifest.yaml", {
+        "created": datetime.now().astimezone().isoformat(timespec="seconds"),
+        "source": manifest.get("source"),
+        "source_sha256": source_sha,
+        "policy": selected,
+        "candidates": written,
+    })
+    return {"ok": True, "run_dir": str(run_dir), "candidates": written}
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -362,21 +617,52 @@ def main(argv: list[str] | None = None) -> None:
     a.add_argument("--k", type=int, default=DEFAULT_MIN_FAMILIES)
     a.add_argument("--tier", action="append", help="restrict to a tier (repeatable)")
     a.add_argument("--limit", type=int, default=None)
+    a.add_argument("--policy", type=Path, default=None)
     a.add_argument("--dry-run", action="store_true", help="show jobs without calling models")
     a.add_argument("--timeout", type=int, default=300)
 
     r = sub.add_parser("reaudit", help="re-attack cleared targets with a stronger ladder")
     r.add_argument("audit_dir", type=Path)
     r.add_argument("--k", type=int, default=DEFAULT_MIN_FAMILIES)
+    r.add_argument("--policy", type=Path, default=None)
     r.add_argument("--timeout", type=int, default=300)
+
+    rec = sub.add_parser("reconstruct", help="dispatch graph reconstruction jobs")
+    rec.add_argument("audit_dir", type=Path)
+    rec.add_argument("--policy", type=Path, default=None)
+    rec.add_argument("--family", action="append", help="restrict to a model family (repeatable)")
+    rec.add_argument("--tier", action="append", help="restrict to a tier (repeatable)")
+    rec.add_argument("--limit", type=int, default=None)
+    rec.add_argument("--dry-run", action="store_true")
+    rec.add_argument("--timeout", type=int, default=300)
+
+    d = sub.add_parser("doctor", help="check configured model runner commands")
+    d.add_argument("--policy", type=Path, default=None)
 
     args = parser.parse_args(argv)
     if args.command == "audit":
+        policy = load_policy(args.policy)
         disp = (lambda job: cli_dispatch(job, timeout=args.timeout))
         out = run_audits(args.audit_dir, min_families=args.k,
                          tiers=set(args.tier) if args.tier else None,
-                         limit=args.limit, dry_run=args.dry_run, dispatcher=disp)
-    else:
+                         limit=args.limit, dry_run=args.dry_run, dispatcher=disp,
+                         policy=policy)
+    elif args.command == "reaudit":
+        policy = load_policy(args.policy)
         disp = (lambda job: cli_dispatch(job, timeout=args.timeout))
-        out = reaudit(args.audit_dir, min_families=args.k, dispatcher=disp)
+        out = reaudit(args.audit_dir, min_families=args.k, dispatcher=disp, policy=policy)
+    elif args.command == "reconstruct":
+        policy = load_policy(args.policy)
+        disp = (lambda job: cli_dispatch(job, timeout=args.timeout))
+        out = reconstruct(
+            args.audit_dir,
+            policy=policy,
+            families=set(args.family) if args.family else None,
+            tiers=set(args.tier) if args.tier else None,
+            limit=args.limit,
+            dry_run=args.dry_run,
+            dispatcher=disp,
+        )
+    else:
+        out = policy_doctor(load_policy(args.policy))
     print(yaml.safe_dump(out, sort_keys=False, allow_unicode=True), end="")

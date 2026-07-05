@@ -2,6 +2,18 @@
 
 You are given `claims.yaml` for a paper. Build the dependency DAG.
 
+Claims:
+
+```yaml
+[paste claims.yaml]
+```
+
+Paper source:
+
+```text
+[paste paper source]
+```
+
 For each support relation, produce:
 
 - `id`: E001, E002, ...
@@ -35,4 +47,3 @@ Return a top-level YAML list (no code fences, no wrapper key), for example:
   verdict: unaudited
   notes: "..."
 ```
-

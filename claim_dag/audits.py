@@ -13,6 +13,7 @@ from .schema import (
     VERDICTS,
     ValidationResult,
 )
+from .source import artifact_matches_source, current_source_sha, resolve_source
 
 # Clearance bar. A `cleared` verdict needs this many audit artifacts from
 # distinct model families (excluding the builder family). Tunable via
@@ -22,6 +23,49 @@ DEFAULT_MIN_FAMILIES = 2
 _COMMON_FIELDS = ("verdict", "model", "family", "date")
 _NODE_FIELDS = ("claim_id",)
 _EDGE_FIELDS = ("edge_id", "suppressed_premise", "attack")
+_CLEARED_SEVERITY_FIELDS = (
+    "could_have_failed",
+    "failure_mode",
+    "attack",
+    "evidence_checked",
+    "source_span",
+)
+
+
+def _check_source_manifest(
+    audit_dir: Path,
+    manifest: Any,
+    errors: list[str],
+    warnings: list[str],
+) -> None:
+    if not isinstance(manifest, dict):
+        warnings.append("source-manifest.yaml is missing or malformed; cannot verify source pinning")
+        return
+
+    source = manifest.get("source")
+    source_sha = manifest.get("source_sha256")
+    if not source:
+        warnings.append("source-manifest.yaml has no source; cannot verify source pinning")
+    if not source_sha:
+        warnings.append("source-manifest.yaml has no source_sha256; anchor drift cannot be checked")
+        return
+    if not isinstance(source_sha, str) or len(source_sha) != 64:
+        warnings.append("source-manifest.yaml source_sha256 does not look like a sha256 hex digest")
+        return
+    if not source:
+        return
+
+    found = resolve_source(audit_dir, str(source))
+    if found is None:
+        warnings.append("source-manifest.yaml source was not found; cannot verify source_sha256")
+        return
+
+    actual = current_source_sha(audit_dir, manifest)
+    if actual != source_sha:
+        errors.append(
+            "source-manifest.yaml source_sha256 does not match the current source; "
+            "the audit record is stale"
+        )
 
 
 def artifacts_by_target(audit_dir: Path) -> tuple[dict[str, list[dict]], dict[str, list[dict]]]:
@@ -55,8 +99,9 @@ def _validate_artifact(fm: dict[str, Any], path: Path, kind: str, errors: list[s
     if fm.get("verdict") == "cleared":
         if fm.get("framing") != REFUTE_FRAMING:
             errors.append(f"{name}: a cleared audit must set framing: {REFUTE_FRAMING}")
-        if not str(fm.get("could_have_failed", "")).strip():
-            errors.append(f"{name}: a cleared audit must record a non-empty could_have_failed")
+        for key in _CLEARED_SEVERITY_FIELDS:
+            if not str(fm.get(key, "")).strip():
+                errors.append(f"{name}: a cleared audit must record a non-empty {key}")
         if not str(fm.get("tier", "")).strip():
             errors.append(f"{name}: a cleared audit must record its tier")
     target_key = "claim_id" if kind == "node" else "edge_id"
@@ -69,6 +114,7 @@ def _enforce_target(
     verdict: str,
     arts: list[dict[str, Any]],
     builder_family: str | None,
+    source_sha: str | None,
     min_families: int,
     errors: list[str],
     warnings: list[str],
@@ -89,7 +135,8 @@ def _enforce_target(
             for a in arts
             if a.get("verdict") == "cleared"
             and a.get("framing") == REFUTE_FRAMING
-            and str(a.get("could_have_failed", "")).strip()
+            and all(str(a.get(key, "")).strip() for key in _CLEARED_SEVERITY_FIELDS)
+            and artifact_matches_source(a, source_sha)
         ]
         families = {a.get("family") for a in clears if a.get("family")}
         if builder_family and builder_family in families:
@@ -108,6 +155,8 @@ def _enforce_target(
                 f"{tid}: cleared needs at least one strong-tier audit; "
                 f"cheap/local agreement is not enough"
             )
+        if source_sha and any(a.get("verdict") == "cleared" and not artifact_matches_source(a, source_sha) for a in arts):
+            errors.append(f"{tid}: cleared has audit artifact(s) from a stale source_sha256")
     elif verdict in {"failed", "weakened"}:
         if not any(a.get("verdict") == verdict for a in arts):
             errors.append(f"{tid}: recorded {verdict} but no artifact returns that verdict")
@@ -129,11 +178,13 @@ def enforce_audit_backing(
 
     manifest = read_yaml(audit_dir / "source-manifest.yaml", {})
     builder_family = manifest.get("built_by") if isinstance(manifest, dict) else None
+    source_sha = manifest.get("source_sha256") if isinstance(manifest, dict) else None
     if not builder_family:
         warnings.append(
             "source-manifest.yaml has no built_by; cannot exclude the builder "
             "family from clearance (set built_by to the family that extracted the graph)"
         )
+    _check_source_manifest(audit_dir, manifest, errors, warnings)
 
     node_by_id: dict[str, list[dict[str, Any]]] = defaultdict(list)
     edge_by_id: dict[str, list[dict[str, Any]]] = defaultdict(list)
@@ -166,14 +217,16 @@ def enforce_audit_backing(
             continue
         _enforce_target(
             claim["id"], claim.get("verdict", "unaudited"),
-            node_by_id.get(claim["id"], []), builder_family, min_families, errors, warnings,
+            node_by_id.get(claim["id"], []), builder_family, source_sha,
+            min_families, errors, warnings,
         )
     for edge in edges:
         if not isinstance(edge, dict) or "id" not in edge:
             continue
         _enforce_target(
             edge["id"], edge.get("verdict", "unaudited"),
-            edge_by_id.get(edge["id"], []), builder_family, min_families, errors, warnings,
+            edge_by_id.get(edge["id"], []), builder_family, source_sha,
+            min_families, errors, warnings,
         )
 
     return ValidationResult(errors, warnings)

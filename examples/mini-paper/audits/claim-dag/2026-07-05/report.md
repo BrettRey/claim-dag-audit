@@ -7,6 +7,7 @@
 - Claim validation errors: 0
 - Edge validation errors: 0
 - Coherence errors: 0
+- Defeater errors: 0
 - Unsupported inference nodes: 0
 - Decorative premise nodes: 0
 - Cycles: 0
@@ -47,6 +48,10 @@
 - none
 
 ## Coherence Errors
+
+- none
+
+## Defeater Errors
 
 - none
 

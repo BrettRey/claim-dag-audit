@@ -21,6 +21,9 @@ items:
     relation:
       enum: [supports, requires, rebuts, qualifies]
       description: Only supports/requires count as support; rebuts/qualifies do not.
+    resolution:
+      enum: [open, answered, defeated, accepted]
+      description: Non-supporting edges default to open; cleared targets require incoming defeaters to be answered or defeated.
     suppressed_premise:
       type: string
     verdict:

@@ -9,7 +9,7 @@ For each support relation, produce:
 - `to`: the claim supported by those sources
 - `relation`: supports, requires, rebuts, or qualifies
 - `suppressed_premise`: the unstated assumption that would make this edge valid
-- `status`: needs-audit
+- `verdict`: unaudited
 - `notes`: one sentence explaining the edge
 
 Rules:
@@ -18,7 +18,21 @@ Rules:
 - If a conclusion depends on a suppressed premise, name it explicitly.
 - If a claim only decorates the prose and supports nothing, leave it with no outgoing edge.
 - If an inference has no support, do not invent support. Let validation flag it.
-- Keep the graph acyclic unless the paper really argues in a circle; if it does, mark the cycle.
+- Only `supports` and `requires` count as support; `rebuts` and `qualifies` do
+  not license the target. A conjunctive premise set goes in one edge's `from`
+  list (jointly support); genuinely independent routes to the same target are
+  separate edges.
+- Keep the graph acyclic. `claim-dag validate` treats a support cycle as an error.
 
-Return YAML only.
+Return a top-level YAML list (no code fences, no wrapper key), for example:
+
+```yaml
+- id: E001
+  from: [C001, C002]
+  to: C003
+  relation: supports
+  suppressed_premise: "..."
+  verdict: unaudited
+  notes: "..."
+```
 

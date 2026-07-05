@@ -6,9 +6,11 @@
 - Edges: 1
 - Claim validation errors: 0
 - Edge validation errors: 0
+- Coherence errors: 0
 - Unsupported inference nodes: 0
 - Decorative premise nodes: 0
 - Cycles: 0
+- Audit-backing errors: 0
 
 ## Claim Types
 
@@ -16,14 +18,17 @@
 - inference: 1
 - stipulation: 1
 
-## Claim Statuses
+## Claim Verdicts
 
-- needs-audit: 1
-- uncleared: 2
+- cleared: 3
 
-## Edge Statuses
+## Edge Relations
 
-- needs-audit: 1
+- supports: 1
+
+## Edge Verdicts
+
+- cleared: 1
 
 ## Claim Errors
 
@@ -41,6 +46,18 @@
 
 - none
 
+## Coherence Errors
+
+- none
+
+## Audit-Backing Errors
+
+- none
+
+## Audit-Backing Warnings
+
+- none
+
 ## Unsupported Inference Nodes
 
 - none
@@ -55,7 +72,7 @@
 
 ## Next Audit Moves
 
-- Fill missing suppressed premises on edge records.
+- Run `claim-dag plan` to emit the audit jobs still needed to clear.
 - Audit every unsupported inference or rewrite the graph.
-- Decide whether decorative premises should be connected, cut, or marked as background.
-- Send the three weakest uncleared edges to an adversarial pass.
+- Decide whether decorative premises should be connected, cut, or marked `background: true`.
+- Route any failed/weakened target to revision before re-auditing.

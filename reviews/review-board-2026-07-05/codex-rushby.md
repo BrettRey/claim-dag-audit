@@ -1,0 +1,25 @@
+# Review: John Rushby (assurance cases, certification epistemology)
+
+1. **One-sentence summary** of what the tool is and claims to do
+
+Claim DAG Audit is a file-first CLI protocol for turning an academic argument into claim nodes and inference edges, then treating “cleared” as the result of an adversarial audit that failed to break the node or edge.
+
+2. **Strengths**
+
+- The central distinction is right: the project separates node audits from edge audits and adversarial passes, so truth/source grounding and inferential license are not collapsed into ordinary prose review ([CLAUDE.md](/Users/brettreynolds/projects/LLM-CLI-projects/tools/claim-dag-audit/CLAUDE.md:8) lines 8-12; [prompts/audit-edge.md](/Users/brettreynolds/projects/LLM-CLI-projects/tools/claim-dag-audit/prompts/audit-edge.md:25) lines 25-30).
+- The file-first design is a good assurance-case instinct: YAML/Markdown artifacts are inspectable, diffable, and can live with the paper repository rather than in an opaque tool state ([README.md](/Users/brettreynolds/projects/LLM-CLI-projects/tools/claim-dag-audit/README.md:6) lines 6-20; [DECISIONS.md](/Users/brettreynolds/projects/LLM-CLI-projects/tools/claim-dag-audit/DECISIONS.md:8) lines 8-10).
+- The validator already catches useful graph hygiene failures: bad endpoints, duplicate IDs, unsupported inference nodes, decorative premises, and cycles ([STATUS.md](/Users/brettreynolds/projects/LLM-CLI-projects/tools/claim-dag-audit/STATUS.md:8) lines 8-15; [claim_dag/graph.py](/Users/brettreynolds/projects/LLM-CLI-projects/tools/claim-dag-audit/claim_dag/graph.py:43) lines 43-55).
+
+3. **Weaknesses**
+
+- The edge relations have almost no semantics downstream. `supports`, `requires`, `rebuts`, and `qualifies` are admitted as enum values ([claim_dag/schema.py](/Users/brettreynolds/projects/LLM-CLI-projects/tools/claim-dag-audit/claim_dag/schema.py:25)), but `analyze()` treats every edge as ordinary positive dependency: it adds all sources to `incoming`, `outgoing`, and `adjacency` without checking `relation` ([claim_dag/graph.py](/Users/brettreynolds/projects/LLM-CLI-projects/tools/claim-dag-audit/claim_dag/graph.py:30) lines 30-42). Consequently, a `rebuts` edge counts as support for an inference node at line 50, and Argdown renders it with the same arrow as support ([claim_dag/graph.py](/Users/brettreynolds/projects/LLM-CLI-projects/tools/claim-dag-audit/claim_dag/graph.py:112) lines 112-115). Action: split positive dependency, negative challenge, and qualification semantics before the pilot, or remove non-support relations until they are meaningful.
+- Defeaters are prompted but not enumerated or managed as assurance objects. The prompts ask for a “hostile wedge” or “attack” ([prompts/audit-edge.md](/Users/brettreynolds/projects/LLM-CLI-projects/tools/claim-dag-audit/prompts/audit-edge.md:43); [schemas/audit.schema.yaml](/Users/brettreynolds/projects/LLM-CLI-projects/tools/claim-dag-audit/schemas/audit.schema.yaml:4) lines 4-6), but there is no defeater list, status, owner, resolution, residual risk, or confidence argument in the graph schema. That means the method still relies on the auditor imagining attacks unaided. In assurance-case terms, this is missing the defeater/eliminative structure one would expect from GSN-style confidence arguments and Rushby-style eliminative certification reasoning; citation names from memory needing verification: Kelly on GSN, Bloomfield/Bishop on confidence in assurance cases, Rushby on assurance-case interpretation/evaluation.
+- `cleared` is currently a self-asserted label, not a propagated or evidence-linked result. `validate` loads only `claims.yaml` and `edges.yaml` ([claim_dag/graph.py](/Users/brettreynolds/projects/LLM-CLI-projects/tools/claim-dag-audit/claim_dag/graph.py:11) lines 11-14), then reports schema and graph hygiene only ([claim_dag/cli.py](/Users/brettreynolds/projects/LLM-CLI-projects/tools/claim-dag-audit/claim_dag/cli.py:63) lines 63-74). It does not require a cleared claim or edge to point to an existing file under `node-audits/` or `edge-audits/`, and it does not prevent a conclusion from being `cleared` while its premises or incoming edges are `failed`. Action: require audit-record paths for `cleared/weakened/failed/deferred`, check file existence and IDs, and compute a derived confidence/clearance state separately from manually entered status.
+
+4. **Key question** you would ask at Q&A
+
+What exactly licenses saying that a conclusion is “cleared”: all supporting premises and support edges cleared under an explicit set of defeated defeaters, or merely one auditor’s failure to find a local attack on the target sentence?
+
+5. **Verdict**: Revise & Resubmit
+
+Not ready to run the Kinds pilot as designed: the file discipline is promising, but relation semantics, defeater tracking, and audit-record enforcement must be fixed before “cleared” can mean what the protocol says it means.

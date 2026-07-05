@@ -13,21 +13,24 @@ The tool should preserve a strict distinction between:
 
 ## Development Rules
 
+- Auditing is LLM-run (no human auditors). The design is in `docs/llm-runner.md`.
 - Keep the data artifacts plain YAML and Markdown unless there is a strong
   reason to add another format.
-- Do not add LLM dispatch automation until the manual Kinds pilot has exposed
-  stable input/output requirements.
-- `cleared` means an adversarial audit failed to break the node or edge. It
-  does not mean the prose sounded plausible.
+- The tool defines and *enforces* the audit contract and emits a dispatch
+  `plan`; it does **not** call models. Model dispatch stays in an external
+  runner so model-specific plumbing never enters the audit record. Keep it that
+  way unless there is a strong reason to fold dispatch in.
+- `cleared` means an adversarial audit failed to break the node or edge, and it
+  is enforced: `validate` requires independent cross-family, strong-tier,
+  refute-framed backing with no dissent. It never means the prose sounded
+  plausible.
 - Prefer small, composable CLI commands over a web app or database.
 
 ## Test Commands
 
 ```bash
-. .venv/bin/activate
-claim-dag validate examples/mini-paper/audits/claim-dag/2026-07-05
-claim-dag argdown examples/mini-paper/audits/claim-dag/2026-07-05
-claim-dag report examples/mini-paper/audits/claim-dag/2026-07-05
+make test        # pytest (tests/) + smoke run on the example
+make plan        # show the dispatch plan for the example
 ```
 
 ## First Pilot

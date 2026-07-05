@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 CLAIM_TYPES = {
@@ -12,18 +12,31 @@ CLAIM_TYPES = {
     "stipulation",
 }
 
-CLAIM_STATUSES = {
-    "uncleared",
-    "needs-audit",
-    "in-progress",
-    "cleared",
-    "weakened",
-    "failed",
-    "deferred",
-}
+# One axis, outcome only. The former workflow states (uncleared, needs-audit,
+# in-progress) collapse into `unaudited`: a target needs auditing iff its
+# verdict is unaudited. Fidler flagged the two-axis conflation; this resolves
+# it (see docs/llm-runner.md).
+VERDICTS = {"unaudited", "cleared", "weakened", "failed", "deferred"}
 
-EDGE_RELATIONS = {"supports", "requires", "rebuts", "qualifies"}
-EDGE_STATUSES = CLAIM_STATUSES
+# Verdicts that assert an audit occurred and therefore must be backed by an
+# audit artifact. `unaudited` and `deferred` do not require backing.
+BACKED_VERDICTS = {"cleared", "weakened", "failed"}
+
+# Relation semantics. Only supporting relations count as incoming support for
+# an inference node and propagate clearance to it. `rebuts` is an attack;
+# `qualifies` limits scope. Rushby and Mayo flagged that analyze() treated all
+# relations as support.
+SUPPORTING_RELATIONS = {"supports", "requires"}
+NON_SUPPORTING_RELATIONS = {"rebuts", "qualifies"}
+EDGE_RELATIONS = SUPPORTING_RELATIONS | NON_SUPPORTING_RELATIONS
+
+# Adversarial framing required of any audit that counts toward `cleared`.
+REFUTE_FRAMING = "refute"
+
+# Tiers that count as an escalation. Clearance requires at least one audit from
+# a strong (or max) tier, so a `cleared` verdict is never trusted from cheap or
+# local models alone (see docs/llm-runner.md, escalation ladder).
+STRONG_TIERS = {"strong", "max"}
 
 CLAIM_ID = re.compile(r"^C[0-9]{3,}$")
 EDGE_ID = re.compile(r"^E[0-9]{3,}$")
@@ -31,8 +44,8 @@ EDGE_ID = re.compile(r"^E[0-9]{3,}$")
 
 @dataclass
 class ValidationResult:
-    errors: list[str]
-    warnings: list[str]
+    errors: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
 
     @property
     def ok(self) -> bool:
@@ -66,7 +79,7 @@ def validate_claims(claims: Any) -> ValidationResult:
         else:
             seen.add(cid)
 
-        for key in ("anchor", "type", "section", "status"):
+        for key in ("anchor", "type", "section", "verdict"):
             if key not in claim:
                 errors.append(f"{cid or label}: missing {key}")
 
@@ -74,8 +87,8 @@ def validate_claims(claims: Any) -> ValidationResult:
             errors.append(f"{cid or label}: anchor is empty")
         if claim.get("type") not in CLAIM_TYPES:
             errors.append(f"{cid or label}: type must be one of {sorted(CLAIM_TYPES)}")
-        if claim.get("status") not in CLAIM_STATUSES:
-            errors.append(f"{cid or label}: status must be one of {sorted(CLAIM_STATUSES)}")
+        if claim.get("verdict") not in VERDICTS:
+            errors.append(f"{cid or label}: verdict must be one of {sorted(VERDICTS)}")
         if claim.get("type") == "cited-claim" and "source" not in claim:
             warnings.append(f"{cid or label}: cited-claim should name a source")
         if claim.get("type") == "empirical-premise" and "evidence" not in claim:
@@ -120,10 +133,9 @@ def validate_edges(edges: Any, claim_ids: set[str]) -> ValidationResult:
             errors.append(f"{eid or label}: unknown target claim {to_id}")
         if edge.get("relation") not in EDGE_RELATIONS:
             errors.append(f"{eid or label}: relation must be one of {sorted(EDGE_RELATIONS)}")
-        if edge.get("status") not in EDGE_STATUSES:
-            errors.append(f"{eid or label}: status must be one of {sorted(EDGE_STATUSES)}")
-        if "suppressed_premise" not in edge:
+        if edge.get("verdict") not in VERDICTS:
+            errors.append(f"{eid or label}: verdict must be one of {sorted(VERDICTS)}")
+        if edge.get("relation") in SUPPORTING_RELATIONS and "suppressed_premise" not in edge:
             warnings.append(f"{eid or label}: no suppressed_premise recorded")
 
     return ValidationResult(errors, warnings)
-

@@ -1,15 +1,17 @@
 # Claim DAG
 
-[C001]: A profile is projectible when observing part of it licenses further expectations.
-  # definition; status=uncleared
+// Statements
 
-[C002]: The category supports prediction only within a stated scope.
-  # stipulation; status=uncleared
+[C001]: A profile is projectible when observing part of it licenses further expectations. #definition #verdict-cleared
+[C002]: The category supports prediction only within a stated scope. #stipulation #verdict-cleared
+[C003]: Therefore, unsupported scope expansion should trigger demotion. #inference #verdict-cleared
 
-[C003]: Therefore, unsupported scope expansion should trigger demotion.
-  # inference; status=needs-audit
+// Arguments (supporting edges: joint premises -> conclusion)
 
-# Edges
+<E001>: supports #verdict-cleared
 
-[C001] -> [C003] # E001; supports; status=needs-audit
-[C002] -> [C003] # E001; supports; status=needs-audit
+(1) [C001]
+(2) [C002]
+(3) If projection is scope-bound, claims that outrun the stated scope should be downgraded.  // suppressed premise
+-----
+(4) [C003]

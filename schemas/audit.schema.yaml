@@ -1,7 +1,30 @@
+# Reference documentation for audit artifacts. Each node-audit / edge-audit file
+# is Markdown beginning with a YAML frontmatter block (--- ... ---) carrying
+# these fields. The authoritative checker is claim_dag/audits.py.
+#
+# A `cleared` verdict is enforced, not asserted: it requires >= K (default 2)
+# artifacts from distinct model families, excluding source-manifest.built_by,
+# at least one from a strong/max tier, each with framing: refute and a non-empty
+# could_have_failed, and NO artifact returning failed/weakened (dissent breaks
+# clearance). See docs/llm-runner.md.
+
 node_audit:
-  required: [claim_id, verdict, auditor, date, test]
-  verdicts: [cleared, weakened, failed, deferred]
-edge_audit:
-  required: [edge_id, verdict, auditor, date, suppressed_premise, attack]
+  required: [claim_id, verdict, model, family, date]
+  cleared_also_required: [framing, tier, could_have_failed]
   verdicts: [cleared, weakened, failed, deferred]
 
+edge_audit:
+  required: [edge_id, verdict, model, family, date, suppressed_premise, attack]
+  cleared_also_required: [framing, tier, could_have_failed]
+  verdicts: [cleared, weakened, failed, deferred]
+
+fields:
+  framing:
+    const: refute
+    description: Audits attempt to break the target; only refute-framed audits clear.
+  tier:
+    enum: [local, cheap, strong, max]
+  family:
+    description: Model family (anthropic, openai, google, local, ...). Diversity buys independence.
+  could_have_failed:
+    description: The observation that would have flipped the verdict; a rubber stamp has none.

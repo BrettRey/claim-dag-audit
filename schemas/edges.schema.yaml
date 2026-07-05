@@ -1,7 +1,9 @@
+# Reference documentation for edges.yaml. The authoritative validator is
+# claim_dag/schema.py (validate_edges); keep this file in sync with it.
 type: array
 items:
   type: object
-  required: [id, from, to, relation, status]
+  required: [id, from, to, relation, verdict]
   properties:
     id:
       type: string
@@ -9,6 +11,7 @@ items:
     from:
       type: array
       minItems: 1
+      description: Source claims. Multiple ids = one conjunctive (joint) premise set.
       items:
         type: string
         pattern: "^C[0-9]{3,}$"
@@ -17,12 +20,12 @@ items:
       pattern: "^C[0-9]{3,}$"
     relation:
       enum: [supports, requires, rebuts, qualifies]
+      description: Only supports/requires count as support; rebuts/qualifies do not.
     suppressed_premise:
       type: string
-    status:
-      enum: [uncleared, needs-audit, in-progress, cleared, weakened, failed, deferred]
+    verdict:
+      enum: [unaudited, cleared, weakened, failed, deferred]
     audit:
       type: string
     notes:
       type: string
-

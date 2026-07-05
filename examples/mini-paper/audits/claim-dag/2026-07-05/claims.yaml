@@ -2,18 +2,17 @@
   anchor: "A profile is projectible when observing part of it licenses further expectations."
   type: definition
   section: Example
-  status: uncleared
+  verdict: cleared
   warrant: stipulation-check
 - id: C002
   anchor: "The category supports prediction only within a stated scope."
   type: stipulation
   section: Example
-  status: uncleared
+  verdict: cleared
   warrant: stipulation-check
 - id: C003
   anchor: "Therefore, unsupported scope expansion should trigger demotion."
   type: inference
   section: Example
-  status: needs-audit
+  verdict: cleared
   warrant: edge-audit
-

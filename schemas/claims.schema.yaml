@@ -1,20 +1,26 @@
+# Reference documentation for claims.yaml. The authoritative validator is
+# claim_dag/schema.py (validate_claims); keep this file in sync with it.
 type: array
 items:
   type: object
-  required: [id, anchor, type, section, status]
+  required: [id, anchor, type, section, verdict]
   properties:
     id:
       type: string
       pattern: "^C[0-9]{3,}$"
     anchor:
       type: string
-      description: Verbatim or near-verbatim text anchor from the paper.
+      description: Verbatim text span from the paper (so drift is detectable).
     type:
       enum: [definition, empirical-premise, cited-claim, inference, stipulation]
     section:
       type: string
-    status:
-      enum: [uncleared, needs-audit, in-progress, cleared, weakened, failed, deferred]
+    verdict:
+      enum: [unaudited, cleared, weakened, failed, deferred]
+      description: Outcome axis only. A claim needs auditing iff verdict is unaudited.
+    background:
+      type: boolean
+      description: Mark off-spine framing so the decorative-premise check ignores it.
     warrant:
       type: string
     source:
@@ -23,4 +29,3 @@ items:
       type: string
     notes:
       type: string
-

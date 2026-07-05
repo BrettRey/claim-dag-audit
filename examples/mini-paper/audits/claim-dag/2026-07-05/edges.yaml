@@ -3,6 +3,5 @@
   to: C003
   relation: supports
   suppressed_premise: "If projection is scope-bound, claims that outrun the stated scope should be downgraded."
-  status: needs-audit
+  verdict: cleared
   notes: "This is the core demotion inference in the mini example."
-

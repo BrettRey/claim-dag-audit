@@ -12,6 +12,7 @@ dependencies = ["PyYAML>=6.0.1"]
 
 [project.scripts]
 claim-dag = "claim_dag.cli:main"
+claim-dag-run = "claim_dag.runner:main"
 
 [tool.setuptools.packages.find]
 include = ["claim_dag*"]

@@ -92,7 +92,7 @@ naming drifts fast).
 
 | Tier | Models | Auth | Role |
 |------|--------|------|------|
-| Local | `glm-4.7-flash`, `gemma3:12b`, `qwen3:8b` (ollama) | none, on-device | First-pass breaker on every target; free, private, unmetered |
+| Local | `glm` (Zhipu) · `qwen` (Alibaba) · `gemma` (Google) via ollama | none, on-device | Free, unmetered, and *three different families* — they satisfy the independence bar at zero cost, so a typical clearance spends just one metered strong-tier call |
 | Cheap | `claude-haiku-4-5`, Copilot (Haiku) | subscription | Bulk cross-family audits |
 | Strong | `claude-opus-4-8`, `codex` (`gpt-5.4`, medium effort) | subscription | Escalation on contested or freshly-cleared targets |
 | Max | `claude-fable-5` | subscription | Drift re-audits only (the hardest edges: Goodman, Ereshefsky/Reydon) |

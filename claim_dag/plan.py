@@ -12,22 +12,33 @@ from .schema import STRONG_TIERS
 # family is required before a target may be promoted to `cleared`. Model names
 # drift fast — verify before relying on them.
 DEFAULT_POLICY: list[dict[str, str]] = [
-    {"family": "local", "model": "glm-4.7-flash:q4_K_M", "tier": "local", "effort": "low",
+    # Local models are free, unmetered, and — crucially — genuinely different
+    # families (Zhipu / Alibaba / Google), so they satisfy the cross-family
+    # independence bar without spending a subscription call. Clearance still
+    # needs one strong-tier audit, but the family diversity can come from here.
+    {"family": "zhipu", "model": "glm-4.7-flash:q4_K_M", "tier": "local", "effort": "low",
      "runner": "ollama run glm-4.7-flash:q4_K_M"},
+    {"family": "qwen", "model": "qwen3:8b", "tier": "local", "effort": "low",
+     "runner": "ollama run qwen3:8b"},
+    # gemma shares the "google" family with the Gemini API — same lineage, so it
+    # is the free stand-in for Google's perspective rather than an extra family.
+    {"family": "google", "model": "gemma3:12b", "tier": "local", "effort": "low",
+     "runner": "ollama run gemma3:12b"},
     {"family": "anthropic", "model": "claude-haiku-4-5", "tier": "cheap", "effort": "low",
      "runner": "claude --model claude-haiku-4-5"},
-    # A refutation pass does not need the top GPT at max reasoning. gpt-5.4 at
-    # medium effort is a capable independent strong-tier attacker and faster.
-    # NOTE: confirm the exact codex model id against `codex` — gpt-5.4 / -mini
-    # are unverified here; a wrong id degrades to a `deferred` audit, not a crash.
+    # A refutation pass does not need the frontier GPT at max reasoning. gpt-5.4
+    # (codex's "everyday" model) at medium effort is a capable independent
+    # strong-tier attacker and much faster. gpt-5.4-mini exists too (via
+    # `codex -m gpt-5.4-mini`) if you ever want to lighten a tier further.
     {"family": "openai", "model": "gpt-5.4", "tier": "strong", "effort": "medium",
      "runner": "codex exec --sandbox read-only -m gpt-5.4"},
     {"family": "anthropic", "model": "claude-opus-4-8", "tier": "strong", "effort": "high",
      "runner": "claude --model claude-opus-4-8"},
-    {"family": "google", "model": "gemini", "tier": "cheap", "effort": "low",
-     "runner": "gemini --yolo"},
-    {"family": "anthropic", "model": "claude-fable-5", "tier": "max", "effort": "high",
-     "runner": "claude --model claude-fable-5"},
+    # Max tier = strongest available attacker for drift re-audits. Claude Fable
+    # belongs here, but there are no Fable credits right now, so Opus 4.8 at max
+    # effort stands in. Restore `claude-fable-5` (tier max) when credits return.
+    {"family": "anthropic", "model": "claude-opus-4-8", "tier": "max", "effort": "max",
+     "runner": "claude --model claude-opus-4-8"},
 ]
 
 

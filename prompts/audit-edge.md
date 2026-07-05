@@ -45,7 +45,7 @@ frontmatter is machine-checked by `claim-dag validate`; fill every field.
 edge_id: E000
 verdict: cleared        # cleared | weakened | failed | deferred
 model: <exact model id you are>
-family: <anthropic | openai | google | local | ...>
+family: <anthropic | openai | google | zhipu | qwen | ...>
 tier: <local | cheap | strong | max>
 framing: refute         # must stay "refute" for a cleared verdict to count
 suppressed_premise: "<the premise the inference actually needs>"

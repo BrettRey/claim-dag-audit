@@ -38,7 +38,7 @@ Return a single Markdown file beginning with a YAML frontmatter block, which
 claim_id: C000
 verdict: cleared        # cleared | weakened | failed | deferred
 model: <exact model id you are>
-family: <anthropic | openai | google | local | ...>
+family: <anthropic | openai | google | zhipu | qwen | ...>
 tier: <local | cheap | strong | max>
 framing: refute         # must stay "refute" for a cleared verdict to count
 could_have_failed: "<the observation that would have flipped this to failed>"

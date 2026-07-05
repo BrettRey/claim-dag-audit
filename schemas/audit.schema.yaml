@@ -25,6 +25,6 @@ fields:
   tier:
     enum: [local, cheap, strong, max]
   family:
-    description: Model family (anthropic, openai, google, local, ...). Diversity buys independence.
+    description: Model family (anthropic, openai, google, zhipu, qwen, ...). Diversity buys independence.
   could_have_failed:
     description: The observation that would have flipped the verdict; a rubber stamp has none.

@@ -106,7 +106,8 @@ def test_runner_stamps_identity_over_model_claims(tmp_path):
 def test_run_audits_clears_spine(tmp_path):
     d = _spine(tmp_path)
     result = run_audits(d, dispatcher=_mock("cleared"))
-    assert result["job_count"] == 4  # C001 x2 families, E001 x2 families
+    # C001 and E001 each get 2 free local families + 1 strong = 3 jobs.
+    assert result["job_count"] == 6
     verdicts = {c["id"]: c["new"] for c in result["promoted"]}
     assert verdicts["C001"] == "cleared"
     assert verdicts["E001"] == "cleared"

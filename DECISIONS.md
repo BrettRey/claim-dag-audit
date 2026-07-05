@@ -68,3 +68,33 @@ e.g. claude-fable-5) and appends demotions to drift-log.yaml. Reason: the drift
 loop needs a genuinely stronger attacker even when the strong families already
 cleared a target; a break from any credible model demotes (dissent breaks
 clearance), giving the dated calibration signal Fidler and Tetlock asked for.
+
+2026-07-05 - Auditing runs under subscription auth (Claude Code + Codex CLIs),
+not the metered API. Reason: no per-token cost; the real budget is subscription
+rate limits and wall-clock, so the ladder is about capability + independence,
+and the runner needs no API keys (the CLIs carry auth).
+
+2026-07-05 - Treat local ollama models as distinct families: glm=Zhipu,
+qwen=Alibaba, gemma=Google (gemma shares the google family with the Gemini API).
+Reason: they are genuinely different training lineages, so they satisfy the
+cross-family independence bar for free; a typical clearance then spends just one
+metered strong-tier call. Dropped the flaky gemini API entry.
+
+2026-07-05 - Drop claude-fable-5 from the ladder for now (no Fable credits);
+Opus 4.8 at max effort stands in as the drift/max-tier attacker. Restore Fable
+(tier max) when credits return. Reason: user constraint.
+
+2026-07-05 - Wire the policy's effort field through to the CLIs (claude
+--effort, codex model_reasoning_effort) and dial strong/max down; a refutation
+pass does not need top-of-dial reasoning. OpenAI strong auditor = gpt-5.4 at
+medium (gpt-5.4 / gpt-5.4-mini confirmed via codex -m).
+
+2026-07-05 - codex must be invoked with --skip-git-repo-check. The runner runs
+it in a neutral non-git cwd (to keep repo context out of the audit), and without
+the flag codex hangs on its git-repo check. An earlier "codex is too slow"
+finding was a mis-invocation, not a speed problem: with the flag a real gpt-5.4
+audit returns in ~29s. Verified live via a subagent (real `failed` verdict).
+
+2026-07-05 - Published to public GitHub: https://github.com/BrettRey/claim-dag-audit
+Added a cute "claim-dog" logo (assets/logo.svg, logo-wordmark.svg), with the
+wordmark theme-aware so it reads on dark grounds.

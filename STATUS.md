@@ -1,7 +1,20 @@
 # STATUS
 
 **Created:** 2026-07-05
-**State:** Reformulated for all-LLM auditing after the 2026-07-05 review board.
+**State:** Shipped to public GitHub; runner + all four dispatch adapters proven live.
+
+### 2026-07-05 Session Notes (afternoon)
+- Evaluated the tool, ran a 5-person review board (Opus + Codex), reformulated
+  for all-LLM auditing (see `docs/llm-runner.md`), and built the external runner
+  (`claim-dag-run` audit/reaudit) plus model-free `claim-dag promote`.
+- Enforced the `cleared` contract; fixed relation semantics, coherence, cycles,
+  Argdown; added a pytest suite (26 tests).
+- Tuned the model policy under subscription auth: local models as distinct
+  families (Zhipu/Alibaba/Google) for free independence; gpt-5.4/medium strong
+  auditor; effort wired through; Fable dropped (no credits) → Opus-max stands in.
+- Fixed a real bug: codex needs `--skip-git-repo-check` (was mis-invoked, not
+  slow). All four families proven live: gemma 14s, qwen, haiku, codex gpt-5.4 29s.
+- Added the claim-dog logo; published https://github.com/BrettRey/claim-dag-audit
 
 ## Current State
 
